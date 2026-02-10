@@ -2,52 +2,31 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession, signIn } from "next-auth/react";
 import { useCartStore } from "@/store/cart";
 import { formatPrice, getDiscountedPrice } from "@/lib/data";
-import { IconChevronLeft, IconTrash, IconMinus, IconPlus, IconTelegram, IconWhatsApp } from "@/components/Icons";
+import { IconChevronLeft, IconTrash, IconMinus, IconPlus } from "@/components/Icons";
 import { WatchImage } from "@/components/WatchImage";
-import { useSettingsStore } from "@/store/settings";
 import { useOrdersStore } from "@/store/orders";
-import { ContactType, OrderItem } from "@/lib/types";
+import { OrderItem } from "@/lib/types";
 
 export default function CartPage() {
-  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
-  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+  const { data: session, status: authStatus } = useSession();
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
   const addItem = useCartStore((s) => s.addItem);
   const decrementItem = useCartStore((s) => s.decrementItem);
   const clearCart = useCartStore((s) => s.clearCart);
-  const telegramUsername = useSettingsStore((s) => s.telegramUsername);
-  const whatsappPhone = useSettingsStore((s) => s.whatsappPhone);
   const addOrder = useOrdersStore((s) => s.addOrder);
   const total = items.reduce((sum, i) => sum + getDiscountedPrice(i.product.retailPrice, i.product.discount) * i.quantity, 0);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
 
-  const [contactType, setContactType] = useState<ContactType>("telegram");
-  const [contactValue, setContactValue] = useState("");
-  const [contactError, setContactError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  function buildOrderMessage() {
-    let msg = "Здравствуйте! Хочу заказать:\n\n";
-    items.forEach((item) => {
-      msg += `• ${item.product.brand} ${item.product.name || item.product.sku}\n`;
-      msg += `  Арт: ${item.product.sku}\n`;
-      const itemPrice = getDiscountedPrice(item.product.retailPrice, item.product.discount);
-      msg += `  Цена: ${formatPrice(itemPrice)}`;
-      if (item.quantity > 1) msg += ` × ${item.quantity}`;
-      msg += "\n\n";
-    });
-    msg += `Итого: ${formatPrice(total)}`;
-    return msg;
-  }
-
-  async function handleSubmitOrder(via: ContactType) {
-    if (!contactValue.trim()) {
-      setContactError("Укажите контакт для связи");
-      return;
-    }
-    setContactError("");
+  async function handleSubmitOrder() {
+    if (!session?.user?.userId) return;
+    setSubmitting(true);
 
     const orderItems: OrderItem[] = items.map((i) => ({
       productId: i.product.id,
@@ -60,18 +39,39 @@ export default function CartPage() {
       quantity: i.quantity,
     }));
 
-    // Save order (API handles stock decrement atomically)
-    await addOrder(orderItems, total, contactType, contactValue);
-
-    // Open messenger
-    const text = encodeURIComponent(buildOrderMessage());
-    if (via === "telegram") {
-      window.open(`https://t.me/${telegramUsername}?text=${text}`, "_blank");
-    } else {
-      window.open(`https://wa.me/${whatsappPhone}?text=${text}`, "_blank");
-    }
-
+    await addOrder(orderItems, total, session.user.userId);
     clearCart();
+    setSubmitting(false);
+    setSuccess(true);
+  }
+
+  if (success) {
+    return (
+      <div className="max-w-lg mx-auto">
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-brand-100">
+          <div className="flex items-center justify-between px-2 h-14">
+            <Link href="/" className="w-10 h-10 flex items-center justify-center text-brand-900">
+              <IconChevronLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="font-heading text-base text-brand-900">Корзина</h1>
+            <div className="w-10" />
+          </div>
+        </header>
+        <div className="text-center py-20 px-4">
+          <div className="text-4xl mb-4">&#10003;</div>
+          <p className="text-brand-900 font-medium mb-2">Заказ оформлен!</p>
+          <p className="text-sm text-brand-500 mb-6">Вы можете отслеживать статус в профиле</p>
+          <div className="flex flex-col gap-2 items-center">
+            <Link href="/profile" className="inline-block bg-brand-900 text-white text-xs tracking-[0.15em] uppercase px-6 py-3">
+              Мои заказы
+            </Link>
+            <Link href="/catalog" className="text-xs text-brand-500 underline">
+              Продолжить покупки
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -160,67 +160,53 @@ export default function CartPage() {
             </div>
           </div>
 
-          {/* Contact form */}
-          <div className="mt-4 bg-brand-50 border border-brand-100 p-3">
-            <p className="text-xs font-medium text-brand-900 mb-2">Ваш контакт для связи</p>
-            <div className="flex gap-2 mb-2">
+          {/* Auth-gated checkout */}
+          <div className="mt-4">
+            {authStatus === "loading" ? (
+              <div className="text-center py-4">
+                <p className="text-sm text-brand-400">Загрузка...</p>
+              </div>
+            ) : !session ? (
               <button
-                onClick={() => setContactType("telegram")}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 border transition-colors ${
-                  contactType === "telegram"
-                    ? "bg-brand-900 text-white border-brand-900"
-                    : "text-brand-500 border-brand-200"
-                }`}
+                onClick={() => signIn("google", { callbackUrl: "/cart" })}
+                className="w-full h-12 flex items-center justify-center gap-2 bg-brand-900 text-white text-sm tracking-wide transition-colors active:bg-brand-800"
               >
-                <IconTelegram className="w-4 h-4" />
-                Telegram
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+                Войти для оформления заказа
               </button>
-              <button
-                onClick={() => setContactType("whatsapp")}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 border transition-colors ${
-                  contactType === "whatsapp"
-                    ? "bg-brand-900 text-white border-brand-900"
-                    : "text-brand-500 border-brand-200"
-                }`}
-              >
-                <IconWhatsApp className="w-4 h-4" />
-                WhatsApp
-              </button>
-            </div>
-            <input
-              value={contactValue}
-              onChange={(e) => { setContactValue(e.target.value); setContactError(""); }}
-              placeholder={
-                contactType === "telegram"
-                  ? "Ваш Telegram (@username или номер)"
-                  : "Ваш WhatsApp номер (77001234567)"
-              }
-              className="w-full h-9 px-3 bg-white border border-brand-200 text-sm outline-none focus:border-brand-400"
-            />
-            {contactError && (
-              <p className="text-[10px] text-red-600 mt-1">{contactError}</p>
+            ) : (
+              <div>
+                <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-100 mb-3">
+                  {session.user.image ? (
+                    <img src={session.user.image} alt="" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-brand-200 flex items-center justify-center text-brand-500 text-xs font-heading">
+                      {(session.user.name || "?")[0]}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-brand-900 truncate">{session.user.name}</p>
+                    <p className="text-[11px] text-brand-500 truncate">{session.user.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSubmitOrder}
+                  disabled={submitting}
+                  className="w-full h-12 flex items-center justify-center gap-2 bg-brand-900 text-white text-sm tracking-wide transition-colors active:bg-brand-800 disabled:opacity-50"
+                >
+                  {submitting ? "Оформление..." : "Оформить заказ"}
+                </button>
+              </div>
             )}
           </div>
 
-          <div className="mt-4 space-y-2.5">
-            <button
-              onClick={() => handleSubmitOrder("telegram")}
-              className="w-full h-12 flex items-center justify-center gap-2 bg-brand-900 text-white text-sm tracking-wide transition-colors active:bg-brand-800"
-            >
-              <IconTelegram className="w-5 h-5" />
-              Отправить заявку в Telegram
-            </button>
-            <button
-              onClick={() => handleSubmitOrder("whatsapp")}
-              className="w-full h-12 flex items-center justify-center gap-2 bg-[#25D366] text-white text-sm tracking-wide transition-colors active:opacity-90"
-            >
-              <IconWhatsApp className="w-5 h-5" />
-              Отправить заявку в WhatsApp
-            </button>
-          </div>
-
           <p className="text-center text-[11px] text-brand-400 mt-4 leading-relaxed">
-            Укажите контакт и нажмите кнопку. Заказ будет сохранён и отправлен менеджеру.
+            Заказ будет сохранён и виден в вашем профиле.
           </p>
         </div>
       )}

@@ -6,13 +6,17 @@ import Link from "next/link";
 import { brands, formatPrice } from "@/lib/data";
 import { SortOption } from "@/lib/types";
 import { ProductCard } from "@/components/ProductCard";
-import { IconFilter, IconSort, IconX, IconChevronLeft } from "@/components/Icons";
+import { IconFilter, IconSort, IconX, IconChevronLeft, IconSearch } from "@/components/Icons";
 import { useProductsStore } from "@/store/products";
 
 const sortLabels: Record<SortOption, string> = {
-  price_asc: "Цена \u2191",
-  price_desc: "Цена \u2193",
+  popular: "Популярные",
+  price_asc: "Сначала дешевле",
+  price_desc: "Сначала дороже",
   new: "Новинки",
+  discount: "По скидке",
+  name_asc: "Название А\u2013Я",
+  name_desc: "Название Я\u2013А",
 };
 
 interface Filters {
@@ -55,6 +59,7 @@ function CatalogContent() {
   const [showSort, setShowSort] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
   const PER_PAGE = 10;
 
   const uniqueBrands = useMemo(() => [...new Set(products.map((p) => p.brand))].sort(), [products]);
@@ -74,7 +79,12 @@ function CatalogContent() {
   }, [filters, PRICE_MIN, PRICE_MAX]);
 
   const filteredAndSorted = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     let result = products.filter((p) => {
+      if (q.length >= 2) {
+        const matches = p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
       if (filters.brand.length && !filters.brand.includes(p.brand)) return false;
       if (filters.gender.length && !filters.gender.includes(p.gender)) return false;
       if (filters.mechanism.length && !filters.mechanism.includes(p.mechanism)) return false;
@@ -83,12 +93,16 @@ function CatalogContent() {
       return true;
     });
 
-    if (sort === "price_asc") result = [...result].sort((a, b) => a.retailPrice - b.retailPrice);
+    if (sort === "popular") result = [...result].sort((a, b) => (b.isHit ? 1 : 0) - (a.isHit ? 1 : 0));
+    else if (sort === "price_asc") result = [...result].sort((a, b) => a.retailPrice - b.retailPrice);
     else if (sort === "price_desc") result = [...result].sort((a, b) => b.retailPrice - a.retailPrice);
     else if (sort === "new") result = [...result].sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+    else if (sort === "discount") result = [...result].sort((a, b) => (b.discount || 0) - (a.discount || 0));
+    else if (sort === "name_asc") result = [...result].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    else if (sort === "name_desc") result = [...result].sort((a, b) => b.name.localeCompare(a.name, "ru"));
 
     return result;
-  }, [products, filters, sort]);
+  }, [products, filters, sort, searchQuery]);
 
   const totalPages = Math.ceil(filteredAndSorted.length / PER_PAGE);
   const paginatedProducts = filteredAndSorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
@@ -125,7 +139,7 @@ function CatalogContent() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-50">
+    <div className="min-h-screen bg-brand-50 max-w-lg mx-auto">
       <header className="sticky top-0 z-30 bg-white border-b border-brand-100">
         <div className="flex items-center justify-between h-14 px-4">
           <Link href="/" className="flex items-center justify-center w-9 h-9 -ml-1">
@@ -144,6 +158,23 @@ function CatalogContent() {
             </button>
           </div>
         </div>
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              placeholder="Артикул, бренд или название..."
+              className="w-full h-10 pl-9 pr-9 bg-brand-50 border border-brand-100 text-sm text-brand-900 placeholder:text-brand-400 outline-none focus:border-brand-300 transition-colors"
+            />
+            {searchQuery && (
+              <button onClick={() => { setSearchQuery(""); setPage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-brand-400">
+                <IconX className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
       </header>
 
       <div className="px-4 py-3">
@@ -153,30 +184,34 @@ function CatalogContent() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-px bg-brand-100 px-0">
+      <div className="grid grid-cols-2 gap-2.5 px-4">
         {paginatedProducts.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1 py-5 px-4">
+        <div className="flex items-center justify-center gap-1 py-5 px-4 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
             disabled={page === 1}
-            className="w-9 h-9 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30 disabled:pointer-events-none active:bg-brand-50"
+            className="w-9 h-9 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30 disabled:pointer-events-none active:bg-brand-50 shrink-0"
           >&lsaquo;</button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-            <button
-              key={p}
-              onClick={() => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-              className={`w-9 h-9 flex items-center justify-center text-sm border transition-colors ${p === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white active:bg-brand-50"}`}
-            >{p}</button>
-          ))}
+          {getPageNumbers(page, totalPages).map((p, i) =>
+            p === "..." ? (
+              <span key={`dots-${i}`} className="w-9 h-9 flex items-center justify-center text-sm text-brand-400 shrink-0">&hellip;</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => { setPage(p as number); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className={`w-9 h-9 flex items-center justify-center text-sm border transition-colors shrink-0 ${p === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white active:bg-brand-50"}`}
+              >{p}</button>
+            )
+          )}
           <button
             onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
             disabled={page === totalPages}
-            className="w-9 h-9 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30 disabled:pointer-events-none active:bg-brand-50"
+            className="w-9 h-9 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30 disabled:pointer-events-none active:bg-brand-50 shrink-0"
           >&rsaquo;</button>
         </div>
       )}
@@ -234,13 +269,31 @@ function CatalogContent() {
           </div>
           <div className="py-2">
             {(Object.keys(sortLabels) as SortOption[]).map((key) => (
-              <button key={key} onClick={() => { setSort(sort === key ? "" : key); setShowSort(false); setPage(1); }} className={`w-full text-left px-4 py-3 text-sm transition-colors ${sort === key ? "text-brand-900 font-semibold bg-brand-50" : "text-brand-700 active:bg-brand-50"}`}>{sortLabels[key]}</button>
+              <button key={key} onClick={() => { setSort(sort === key ? "" : key); setShowSort(false); setPage(1); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm transition-colors ${sort === key ? "text-brand-900 font-semibold bg-brand-50" : "text-brand-700 active:bg-brand-50"}`}>
+                <span>{sortLabels[key]}</span>
+                {sort === key && <svg className="w-4 h-4 text-brand-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+              </button>
             ))}
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function getPageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "...")[] = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push("...", total);
+  } else if (current >= total - 3) {
+    pages.push(1, "...");
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1, "...", current - 1, current, current + 1, "...", total);
+  }
+  return pages;
 }
 
 function FilterChips({ title, items, selected, onToggle }: { title: string; items: string[]; selected: string[]; onToggle: (v: string) => void }) {

@@ -15,7 +15,7 @@ export function ProductCard({ product }: { product: Product }) {
   const cartQty = useCartStore((s) => s.getQuantity(product.id));
   const outOfStock = product.stock <= 0;
   const cartFull = cartQty >= product.stock;
-  const hasDiscount = product.discount && product.discount > 0;
+  const hasDiscount = (product.discount ?? 0) > 0;
   const finalPrice = getDiscountedPrice(product.retailPrice, product.discount);
 
   return (
@@ -27,25 +27,20 @@ export function ProductCard({ product }: { product: Product }) {
             alt={`${product.brand} ${product.name}`}
             className="w-full h-full object-contain p-3 transition-transform duration-300 group-hover:scale-105"
           />
-          {product.isNew && (
-            <span className="absolute top-2 left-2 bg-brand-900 text-white text-[10px] tracking-widest uppercase px-2 py-0.5">
-              New
-            </span>
-          )}
-          {product.isHit && (
-            <span className="absolute top-2 left-2 bg-brand-900 text-white text-[10px] tracking-widest uppercase px-2 py-0.5" style={product.isNew ? { left: "auto", right: "8px" } : {}}>
-              Hit
-            </span>
-          )}
-          {hasDiscount && (
-            <span className="absolute top-2 right-10 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5">
-              -{product.discount}%
-            </span>
-          )}
           {outOfStock && (
             <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
               <span className="text-xs font-medium text-brand-500 bg-white px-3 py-1 border border-brand-200">Нет в наличии</span>
             </div>
+          )}
+          {product.isNew && (
+            <span className="absolute bottom-2 left-2 z-10 bg-brand-900 text-white text-[10px] tracking-widest uppercase px-2 py-0.5">
+              New
+            </span>
+          )}
+          {product.isHit && (
+            <span className="absolute bottom-2 right-2 z-10 bg-orange-500 text-white text-[10px] tracking-widest uppercase px-2 py-0.5">
+              Hit
+            </span>
           )}
         </div>
         <div className="p-2.5">
@@ -55,7 +50,12 @@ export function ProductCard({ product }: { product: Product }) {
           <div className="flex items-center gap-2 mt-1.5">
             <span className="text-base font-bold text-brand-900">{formatPrice(finalPrice)}</span>
             {hasDiscount && (
-              <span className="text-xs text-brand-400 line-through">{formatPrice(product.retailPrice)}</span>
+              <>
+                <span className="text-xs text-brand-400 line-through">{formatPrice(product.retailPrice)}</span>
+                <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5">
+                  -{product.discount}%
+                </span>
+              </>
             )}
           </div>
         </div>

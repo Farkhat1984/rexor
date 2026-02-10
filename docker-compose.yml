@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./data:/app/data
+      - ./next.config.ts:/app/next.config.ts
+      - ./tailwind.config.ts:/app/tailwind.config.ts:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./.env.local:/app/.env.local:ro
+    environment:
+      - WATCHPACK_POLLING=true
+    restart: unless-stopped

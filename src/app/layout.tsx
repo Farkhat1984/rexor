@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
+import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "REXOR — Магазин наручных часов",
@@ -27,8 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="pb-16">
-        <main className="min-h-screen">{children}</main>
-        <BottomNav />
+        <AuthProvider>
+          <main className="min-h-screen">{children}</main>
+          <BottomNav />
+        </AuthProvider>
       </body>
     </html>
   );

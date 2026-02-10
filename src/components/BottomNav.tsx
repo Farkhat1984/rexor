@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconHome, IconGrid, IconCart, IconSearch } from "./Icons";
+import { IconHome, IconGrid, IconCart, IconUser } from "./Icons";
 import { useCartStore } from "@/store/cart";
 import { useEffect, useState } from "react";
 
 const navItems = [
   { href: "/", label: "Главная", icon: IconHome },
   { href: "/catalog", label: "Каталог", icon: IconGrid },
-  { href: "/search", label: "Поиск", icon: IconSearch },
   { href: "/cart", label: "Корзина", icon: IconCart },
+  { href: "/profile", label: "Профиль", icon: IconUser },
 ];
 
 export function BottomNav() {

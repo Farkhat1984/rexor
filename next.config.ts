@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   serverExternalPackages: ["better-sqlite3"],
+  allowedDevOrigins: ["https://rexor.kz"],
 };
 
 export default nextConfig;

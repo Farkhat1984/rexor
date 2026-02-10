@@ -3,7 +3,6 @@
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { ProductCard } from "@/components/ProductCard";
-import { IconSearch } from "@/components/Icons";
 import { useBannersStore } from "@/store/banners";
 import { useBrandsStore } from "@/store/brands";
 import { useProductsStore } from "@/store/products";
@@ -92,15 +91,6 @@ export default function HomePage() {
           )}
         </section>
       )}
-
-      {/* Quick Search */}
-      <Link
-        href="/search"
-        className="mx-4 mt-4 flex items-center gap-3 h-11 px-4 bg-brand-50 border border-brand-100 text-brand-400 text-sm"
-      >
-        <IconSearch className="w-4 h-4 shrink-0" />
-        <span>Поиск по артикулу или бренду...</span>
-      </Link>
 
       {/* Brands */}
       <section className="mt-6">

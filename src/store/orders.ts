@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { Order, OrderItem, OrderStatus, ContactType, Customer } from "@/lib/types";
+import { Order, OrderItem, OrderStatus, Customer } from "@/lib/types";
 
 interface OrdersStore {
   orders: Order[];
@@ -12,8 +12,7 @@ interface OrdersStore {
   addOrder: (
     items: OrderItem[],
     total: number,
-    contactType: ContactType,
-    contactValue: string
+    userId: string
   ) => Promise<string>;
   updateStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   addNote: (orderId: string, note: string) => void;
@@ -39,19 +38,28 @@ export const useOrdersStore = create<OrdersStore>()((set, get) => ({
     }
   },
 
-  addOrder: async (items, total, contactType, contactValue) => {
+  addOrder: async (items, total, userId) => {
     const now = new Date().toISOString();
     const id = String(Date.now());
-    const trimmed = contactValue.trim();
 
     // Optimistic
-    const order: Order = { id, items, total, status: "new", contactType, contactValue: trimmed, createdAt: now, updatedAt: now };
+    const order: Order = {
+      id,
+      items,
+      total,
+      status: "new",
+      contactType: "telegram",
+      contactValue: "",
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    };
     set({ orders: [order, ...get().orders] });
 
     await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items, total, contactType, contactValue }),
+      body: JSON.stringify({ items, total, userId }),
     });
 
     return id;

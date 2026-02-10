@@ -101,9 +101,26 @@ function initSchema(db: Database.Database) {
       value TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id        TEXT PRIMARY KEY,
+      googleId  TEXT NOT NULL,
+      email     TEXT NOT NULL,
+      name      TEXT NOT NULL DEFAULT '',
+      image     TEXT NOT NULL DEFAULT '',
+      isAdmin   INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_googleId ON users(googleId);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
     INSERT OR IGNORE INTO settings (key, value) VALUES ('telegramUsername', 'rexor_watches');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('whatsappPhone', '77001234567');
   `);
+
+  // Migration: add userId column to orders
+  try { db.exec(`ALTER TABLE orders ADD COLUMN userId TEXT NOT NULL DEFAULT ''`); } catch {}
 }
 
 // --- Product serialization ---

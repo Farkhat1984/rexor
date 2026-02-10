@@ -55,7 +55,7 @@ export interface Filters {
   priceMax: number;
 }
 
-export type SortOption = "price_asc" | "price_desc" | "new";
+export type SortOption = "popular" | "price_asc" | "price_desc" | "new" | "discount" | "name_asc" | "name_desc";
 
 export type OrderStatus = "new" | "confirmed" | "rejected";
 export type ContactType = "telegram" | "whatsapp";
@@ -78,9 +78,23 @@ export interface Order {
   status: OrderStatus;
   contactType: ContactType;
   contactValue: string;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
   createdAt: string;
   updatedAt: string;
   note?: string;
+}
+
+export interface User {
+  id: string;
+  googleId: string;
+  email: string;
+  name: string;
+  image: string;
+  isAdmin: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Customer {

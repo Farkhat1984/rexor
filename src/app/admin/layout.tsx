@@ -8,6 +8,7 @@ import { IconMenu, IconX } from "@/components/Icons";
 const adminNav = [
   { href: "/admin", label: "Товары" },
   { href: "/admin/orders", label: "Заказы" },
+  { href: "/admin/customers", label: "Клиенты" },
   { href: "/admin/brands", label: "Бренды" },
   { href: "/admin/banners", label: "Баннеры" },
   { href: "/admin/settings", label: "Настройки" },

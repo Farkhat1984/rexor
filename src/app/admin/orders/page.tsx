@@ -49,7 +49,8 @@ export default function AdminOrdersPage() {
     return orders.filter((o) => {
       if (filterStatus !== "all" && o.status !== filterStatus) return false;
       if (q) {
-        const matchContact = o.contactValue.toLowerCase().includes(q);
+        const matchContact = o.contactValue?.toLowerCase().includes(q);
+        const matchUser = (o.userName || "").toLowerCase().includes(q) || (o.userEmail || "").toLowerCase().includes(q);
         const matchItem = o.items.some(
           (i) =>
             i.sku.toLowerCase().includes(q) ||
@@ -57,7 +58,7 @@ export default function AdminOrdersPage() {
             i.name.toLowerCase().includes(q)
         );
         const matchId = o.id.includes(q);
-        if (!matchContact && !matchItem && !matchId) return false;
+        if (!matchContact && !matchUser && !matchItem && !matchId) return false;
       }
       return true;
     });
@@ -148,10 +149,24 @@ export default function AdminOrdersPage() {
               <span className="text-[10px] text-brand-400">{formatDate(order.createdAt)}</span>
             </div>
 
-            {/* Contact */}
+            {/* Contact / User */}
             <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-[10px] text-brand-400">{order.contactType === "telegram" ? "TG" : "WA"}:</span>
-              <span className="text-xs font-medium text-brand-900">{order.contactValue}</span>
+              {order.userName || order.userEmail ? (
+                <>
+                  <span className="text-[10px] text-brand-400">Google:</span>
+                  <span className="text-xs font-medium text-brand-900">{order.userName || order.userEmail}</span>
+                  {order.userEmail && order.userName && (
+                    <span className="text-[10px] text-brand-400">({order.userEmail})</span>
+                  )}
+                </>
+              ) : order.contactValue ? (
+                <>
+                  <span className="text-[10px] text-brand-400">{order.contactType === "telegram" ? "TG" : "WA"}:</span>
+                  <span className="text-xs font-medium text-brand-900">{order.contactValue}</span>
+                </>
+              ) : (
+                <span className="text-[10px] text-brand-400">Нет контакта</span>
+              )}
             </div>
 
             {/* Items summary */}
