@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { formatPrice } from "@/lib/data";
 import { IconChevronLeft, IconSearch, IconX } from "@/components/Icons";
@@ -8,6 +8,8 @@ import { WatchImage } from "@/components/WatchImage";
 import { useProductsStore } from "@/store/products";
 
 export default function SearchPage() {
+  const fetchProducts = useProductsStore((s) => s.fetchProducts);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
   const products = useProductsStore((s) => s.products);
   const [query, setQuery] = useState("");
 

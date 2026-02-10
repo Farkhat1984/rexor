@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useProductsStore } from "@/store/products";
 import { parseExcelFile } from "@/lib/parseExcel";
 import { formatPrice } from "@/lib/data";
@@ -12,8 +12,9 @@ const PER_PAGE = 20;
 const GENDER_OPTIONS = ["мужской", "женский", "мужские", "женские", "унисекс"];
 
 export default function AdminProductsPage() {
-  const { products, addProducts, addProduct, removeProduct, updateProduct, toggleNew, toggleHit, toggleMain } =
+  const { products, addProducts, addProduct, removeProduct, updateProduct, toggleNew, toggleHit, toggleMain, fetchProducts } =
     useProductsStore();
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = useState("");

@@ -1,24 +1,48 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
 export interface Settings {
-  telegramUsername: string; // без @, например rexor_watches
-  whatsappPhone: string;   // международный формат, например 77001234567
+  telegramUsername: string;
+  whatsappPhone: string;
 }
 
 interface SettingsStore extends Settings {
+  loaded: boolean;
+  loading: boolean;
+  fetchSettings: () => Promise<void>;
   update: (data: Partial<Settings>) => void;
 }
 
-export const useSettingsStore = create<SettingsStore>()(
-  persist(
-    (set) => ({
-      telegramUsername: "rexor_watches",
-      whatsappPhone: "77001234567",
-      update: (data) => set(data),
-    }),
-    { name: "rexor-settings" }
-  )
-);
+let settingsTimer: ReturnType<typeof setTimeout>;
+
+export const useSettingsStore = create<SettingsStore>()((set, get) => ({
+  telegramUsername: "rexor_watches",
+  whatsappPhone: "77001234567",
+  loaded: false,
+  loading: false,
+
+  fetchSettings: async () => {
+    if (get().loaded || get().loading) return;
+    set({ loading: true });
+    try {
+      const res = await fetch("/api/settings");
+      const data = await res.json();
+      set({ ...data, loaded: true, loading: false });
+    } catch {
+      set({ loading: false });
+    }
+  },
+
+  update: (data) => {
+    set(data);
+    clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    }, 500);
+  },
+}));

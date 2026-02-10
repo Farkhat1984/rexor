@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useBrandsStore } from "@/store/brands";
 import { IconPlus, IconTrash } from "@/components/Icons";
 
 export default function AdminBrandsPage() {
-  const { brands, addBrand, removeBrand, updateBrand } = useBrandsStore();
+  const { brands, addBrand, removeBrand, updateBrand, fetchBrands } = useBrandsStore();
+  useEffect(() => { fetchBrands(); }, [fetchBrands]);
   const [newName, setNewName] = useState("");
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 

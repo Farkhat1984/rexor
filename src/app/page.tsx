@@ -9,6 +9,9 @@ import { useBrandsStore } from "@/store/brands";
 import { useProductsStore } from "@/store/products";
 
 export default function HomePage() {
+  const fetchProducts = useProductsStore((s) => s.fetchProducts);
+  const fetchBanners = useBannersStore((s) => s.fetchBanners);
+  const fetchBrands = useBrandsStore((s) => s.fetchBrands);
   const banners = useBannersStore((s) => s.banners).filter((b) => b.active);
   const storeBrands = useBrandsStore((s) => s.brands);
   const products = useProductsStore((s) => s.products);
@@ -17,6 +20,29 @@ export default function HomePage() {
   const hits = products.filter((p) => p.isHit && !p.showOnMain && p.stock > 0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeDot, setActiveDot] = useState(0);
+
+  useEffect(() => {
+    fetchProducts();
+    fetchBanners();
+    fetchBrands();
+    // One-time migration from localStorage to SQLite
+    if (!localStorage.getItem("rexor-migrated-to-sqlite")) {
+      const payload: Record<string, unknown> = {};
+      for (const key of ["rexor-products", "rexor-orders", "rexor-brands", "rexor-banners", "rexor-settings"]) {
+        const raw = localStorage.getItem(key);
+        if (raw) try { payload[key] = JSON.parse(raw); } catch { /* skip */ }
+      }
+      if (Object.keys(payload).length > 0) {
+        fetch("/api/migrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).then((res) => { if (res.ok) { localStorage.setItem("rexor-migrated-to-sqlite", "1"); window.location.reload(); } });
+      } else {
+        localStorage.setItem("rexor-migrated-to-sqlite", "1");
+      }
+    }
+  }, [fetchProducts, fetchBanners, fetchBrands]);
 
   useEffect(() => {
     const el = scrollRef.current;

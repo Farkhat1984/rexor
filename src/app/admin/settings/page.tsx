@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { useSettingsStore } from "@/store/settings";
 import { IconTelegram, IconWhatsApp } from "@/components/Icons";
 
 export default function AdminSettingsPage() {
-  const { telegramUsername, whatsappPhone, update } = useSettingsStore();
+  const { telegramUsername, whatsappPhone, update, fetchSettings } = useSettingsStore();
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   return (
     <div>

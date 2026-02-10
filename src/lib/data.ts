@@ -13,7 +13,7 @@ export const brands: Brand[] = [
 ];
 
 export function formatPrice(price: number): string {
-  return price.toLocaleString("ru-KZ") + " ₸";
+  return (price ?? 0).toLocaleString("ru-KZ") + " ₸";
 }
 
 export function getDiscountedPrice(price: number, discount?: number): number {

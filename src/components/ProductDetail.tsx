@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { formatPrice, getDiscountedPrice } from "@/lib/data";
@@ -21,6 +21,9 @@ import { useSettingsStore } from "@/store/settings";
 export function ProductDetail() {
   const params = useParams();
   const id = params.id as string;
+  const fetchProducts = useProductsStore((s) => s.fetchProducts);
+  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  useEffect(() => { fetchProducts(); fetchSettings(); }, [fetchProducts, fetchSettings]);
   const product = useProductsStore((s) => s.products.find((p) => p.id === id));
 
   const addItem = useCartStore((s) => s.addItem);

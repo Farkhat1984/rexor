@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { brands, formatPrice } from "@/lib/data";
@@ -25,6 +25,8 @@ interface Filters {
 }
 
 function CatalogContent() {
+  const fetchProducts = useProductsStore((s) => s.fetchProducts);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
   const products = useProductsStore((s) => s.products).filter((p) => p.stock > 0);
   const searchParams = useSearchParams();
   const initialBrandSlug = searchParams.get("brand") || "";

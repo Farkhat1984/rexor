@@ -1,0 +1,18 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/db";
+
+export function GET() {
+  const db = getDb();
+  const brands = db.prepare("SELECT * FROM brands ORDER BY rowid").all();
+  return NextResponse.json(brands);
+}
+
+export async function POST(req: NextRequest) {
+  const { name } = await req.json();
+  const db = getDb();
+  const id = String(Date.now());
+  const slug = name.toLowerCase().replace(/\s+/g, "-");
+  db.prepare("INSERT INTO brands (id, name, slug, image) VALUES (?, ?, ?, '')").run(id, name, slug);
+  const brands = db.prepare("SELECT * FROM brands ORDER BY rowid").all();
+  return NextResponse.json(brands);
+}

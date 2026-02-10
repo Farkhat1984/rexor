@@ -1,8 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { brands as defaultBrands } from "@/lib/data";
 
 export interface BrandItem {
   id: string;
@@ -11,44 +9,65 @@ export interface BrandItem {
   image: string;
 }
 
-const initial: BrandItem[] = defaultBrands.map((b) => ({
-  id: b.id,
-  name: b.name,
-  slug: b.slug,
-  image: "",
-}));
-
 interface BrandsStore {
   brands: BrandItem[];
-  addBrand: (name: string) => void;
-  removeBrand: (id: string) => void;
+  loaded: boolean;
+  loading: boolean;
+  fetchBrands: () => Promise<void>;
+  addBrand: (name: string) => Promise<void>;
+  removeBrand: (id: string) => Promise<void>;
   updateBrand: (id: string, data: Partial<BrandItem>) => void;
 }
 
-export const useBrandsStore = create<BrandsStore>()(
-  persist(
-    (set, get) => ({
-      brands: initial,
-      addBrand: (name) => {
-        const slug = name.toLowerCase().replace(/\s+/g, "-");
-        set({
-          brands: [
-            ...get().brands,
-            { id: String(Date.now()), name, slug, image: "" },
-          ],
-        });
-      },
-      removeBrand: (id) => {
-        set({ brands: get().brands.filter((b) => b.id !== id) });
-      },
-      updateBrand: (id, data) => {
-        set({
-          brands: get().brands.map((b) =>
-            b.id === id ? { ...b, ...data } : b
-          ),
-        });
-      },
-    }),
-    { name: "rexor-brands" }
-  )
-);
+let brandTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+export const useBrandsStore = create<BrandsStore>()((set, get) => ({
+  brands: [],
+  loaded: false,
+  loading: false,
+
+  fetchBrands: async () => {
+    if (get().loaded || get().loading) return;
+    set({ loading: true });
+    try {
+      const res = await fetch("/api/brands");
+      const brands = await res.json();
+      set({ brands, loaded: true, loading: false });
+    } catch {
+      set({ loading: false });
+    }
+  },
+
+  addBrand: async (name) => {
+    const slug = name.toLowerCase().replace(/\s+/g, "-");
+    const temp: BrandItem = { id: String(Date.now()), name, slug, image: "" };
+    set({ brands: [...get().brands, temp] });
+
+    const res = await fetch("/api/brands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const brands = await res.json();
+    set({ brands });
+  },
+
+  removeBrand: async (id) => {
+    set({ brands: get().brands.filter((b) => b.id !== id) });
+    await fetch(`/api/brands/${id}`, { method: "DELETE" });
+  },
+
+  updateBrand: (id, data) => {
+    set({
+      brands: get().brands.map((b) => (b.id === id ? { ...b, ...data } : b)),
+    });
+    clearTimeout(brandTimers[id]);
+    brandTimers[id] = setTimeout(() => {
+      fetch(`/api/brands/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    }, 500);
+  },
+}));

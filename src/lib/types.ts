@@ -56,3 +56,39 @@ export interface Filters {
 }
 
 export type SortOption = "price_asc" | "price_desc" | "new";
+
+export type OrderStatus = "new" | "confirmed" | "rejected";
+export type ContactType = "telegram" | "whatsapp";
+
+export interface OrderItem {
+  productId: string;
+  sku: string;
+  brand: string;
+  name: string;
+  retailPrice: number;
+  discount?: number;
+  finalPrice: number;
+  quantity: number;
+}
+
+export interface Order {
+  id: string;
+  items: OrderItem[];
+  total: number;
+  status: OrderStatus;
+  contactType: ContactType;
+  contactValue: string;
+  createdAt: string;
+  updatedAt: string;
+  note?: string;
+}
+
+export interface Customer {
+  id: string;
+  contactType: ContactType;
+  contactValue: string;
+  ordersCount: number;
+  totalSpent: number;
+  firstOrderAt: string;
+  lastOrderAt: string;
+}

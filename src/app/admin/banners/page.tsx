@@ -1,25 +1,46 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useBannersStore } from "@/store/banners";
 import { IconPlus, IconTrash } from "@/components/Icons";
 
+const MAX_WIDTH = 800;
+const QUALITY = 0.7;
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX_WIDTH) {
+        h = Math.round(h * (MAX_WIDTH / w));
+        w = MAX_WIDTH;
+      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/webp", QUALITY));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 export default function AdminBannersPage() {
-  const { banners, addBanner, removeBanner, toggleActive, updateBanner } =
+  const { banners, addBanner, removeBanner, toggleActive, updateBanner, fetchBanners } =
     useBannersStore();
+  useEffect(() => { fetchBanners(); }, [fetchBanners]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [newLink, setNewLink] = useState("/catalog");
 
-  function handleAddImage(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAddImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      addBanner(base64, newLink);
-      setNewLink("/catalog");
-    };
-    reader.readAsDataURL(file);
+    const base64 = await compressImage(file);
+    addBanner(base64, newLink);
+    setNewLink("/catalog");
     e.target.value = "";
   }
 
@@ -27,14 +48,11 @@ export default function AdminBannersPage() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.onchange = () => {
+    input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        updateBanner(bannerId, { image: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      const base64 = await compressImage(file);
+      updateBanner(bannerId, { image: base64 });
     };
     input.click();
   }
