@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #1D2223;
+  --color-brand-light: #E6E7E8;
+  --color-brand-50: #f7f7f8;
+  --color-brand-100: #eeeef0;
+  --color-brand-200: #E6E7E8;
+  --color-brand-300: #c8c9cb;
+  --color-brand-400: #a0a1a4;
+  --color-brand-500: #76777a;
+  --color-brand-600: #56575a;
+  --color-brand-700: #3d3e40;
+  --color-brand-800: #2a2b2d;
+  --color-brand-900: #1D2223;
+  --color-brand-950: #111213;
+
+  --font-heading: "Libre Baskerville", "Baskerville Old Face", "Baskerville", "Georgia", serif;
+  --font-body: "Source Serif 4", "Century", "Georgia", serif;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: var(--font-body);
+    color: var(--color-brand-900);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: #ffffff;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: 0.02em;
+  }
+
+  input, select, textarea, button {
+    font-family: var(--font-body);
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
