@@ -13,7 +13,7 @@ interface BrandsStore {
   brands: BrandItem[];
   loaded: boolean;
   loading: boolean;
-  fetchBrands: () => Promise<void>;
+  fetchBrands: (force?: boolean) => Promise<void>;
   addBrand: (name: string) => Promise<void>;
   removeBrand: (id: string) => Promise<void>;
   updateBrand: (id: string, data: Partial<BrandItem>) => void;
@@ -26,8 +26,8 @@ export const useBrandsStore = create<BrandsStore>()((set, get) => ({
   loaded: false,
   loading: false,
 
-  fetchBrands: async () => {
-    if (get().loaded || get().loading) return;
+  fetchBrands: async (force?: boolean) => {
+    if (!force && (get().loaded || get().loading)) return;
     set({ loading: true });
     try {
       const res = await fetch("/api/brands");

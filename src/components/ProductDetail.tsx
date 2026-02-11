@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { formatPrice, getDiscountedPrice } from "@/lib/data";
+import { Product } from "@/lib/types";
 import { useCartStore } from "@/store/cart";
 import { useFavoritesStore } from "@/store/favorites";
-import { useProductsStore } from "@/store/products";
 import {
   IconChevronLeft,
   IconHeart,
@@ -21,10 +21,19 @@ import { useSettingsStore } from "@/store/settings";
 export function ProductDetail() {
   const params = useParams();
   const id = params.id as string;
-  const fetchProducts = useProductsStore((s) => s.fetchProducts);
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
-  useEffect(() => { fetchProducts(); fetchSettings(); }, [fetchProducts, fetchSettings]);
-  const product = useProductsStore((s) => s.products.find((p) => p.id === id));
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/products/${id}`)
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((data) => setProduct(data))
+      .catch(() => setProduct(null))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const addItem = useCartStore((s) => s.addItem);
   const cartQty = useCartStore((s) => s.getQuantity(id));
@@ -35,6 +44,14 @@ export function ProductDetail() {
   const whatsappPhone = useSettingsStore((s) => s.whatsappPhone);
   const [selectedImage, setSelectedImage] = useState(0);
   const [shared, setShared] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="max-w-lg mx-auto min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-brand-200 border-t-brand-900 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!product) {
     return (

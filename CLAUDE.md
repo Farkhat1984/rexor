@@ -42,6 +42,14 @@ SQLite at `data/rexor.db`. Schema auto-creates on first `getDb()` call. Key deta
 - Booleans stored as integers (0/1), serialized/deserialized in `db.ts`
 - Orders created atomically (order insert + customer upsert + stock decrement in one transaction)
 
+### Authentication
+
+Google OAuth via **NextAuth v5** (beta). Config in `src/lib/auth.ts`, route handler at `src/app/api/auth/[...nextauth]/route.ts`.
+- JWT-based sessions; user records stored in SQLite `users` table
+- Admin role determined by `ADMIN_EMAILS` env var (comma-separated list)
+- Admin pages protected by `isAdmin` flag on the session
+- Environment variables required: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`, `NEXTAUTH_SECRET`
+
 ### Path Alias
 
 `@/*` maps to `./src/*` (configured in tsconfig.json).

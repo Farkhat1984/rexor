@@ -2,28 +2,42 @@
 
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
+import { Product } from "@/lib/types";
 import { ProductCard } from "@/components/ProductCard";
 import { useBannersStore } from "@/store/banners";
 import { useBrandsStore } from "@/store/brands";
-import { useProductsStore } from "@/store/products";
 
 export default function HomePage() {
-  const fetchProducts = useProductsStore((s) => s.fetchProducts);
   const fetchBanners = useBannersStore((s) => s.fetchBanners);
   const fetchBrands = useBrandsStore((s) => s.fetchBrands);
   const banners = useBannersStore((s) => s.banners).filter((b) => b.active);
   const storeBrands = useBrandsStore((s) => s.brands);
-  const products = useProductsStore((s) => s.products);
-  const featured = products.filter((p) => p.showOnMain && p.stock > 0);
-  const newArrivals = products.filter((p) => p.isNew && !p.showOnMain && p.stock > 0);
-  const hits = products.filter((p) => p.isHit && !p.showOnMain && p.stock > 0);
+
+  const [featured, setFeatured] = useState<Product[]>([]);
+  const [newArrivals, setNewArrivals] = useState<Product[]>([]);
+  const [hits, setHits] = useState<Product[]>([]);
+  const [hasProducts, setHasProducts] = useState(true);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeDot, setActiveDot] = useState(0);
 
   useEffect(() => {
-    fetchProducts();
     fetchBanners();
     fetchBrands();
+
+    // Fetch lightweight product sections in parallel
+    const base = "/api/products?inStock=true";
+    Promise.all([
+      fetch(`${base}&page=1&limit=6&showOnMain=true`).then((r) => r.json()),
+      fetch(`${base}&page=1&limit=4&isNew=true&showOnMain=false`).then((r) => r.json()),
+      fetch(`${base}&page=1&limit=4&isHit=true&showOnMain=false`).then((r) => r.json()),
+    ]).then(([featuredData, newData, hitsData]) => {
+      setFeatured(featuredData.products || []);
+      setNewArrivals(newData.products || []);
+      setHits(hitsData.products || []);
+      setHasProducts(featuredData.stats?.totalAll > 0);
+    }).catch(() => {});
+
     // One-time migration from localStorage to SQLite
     if (!localStorage.getItem("rexor-migrated-to-sqlite")) {
       const payload: Record<string, unknown> = {};
@@ -41,7 +55,7 @@ export default function HomePage() {
         localStorage.setItem("rexor-migrated-to-sqlite", "1");
       }
     }
-  }, [fetchProducts, fetchBanners, fetchBrands]);
+  }, [fetchBanners, fetchBrands]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -63,19 +77,37 @@ export default function HomePage() {
             ref={scrollRef}
             className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
           >
-            {banners.map((banner) => (
-              <Link
-                key={banner.id}
-                href={banner.link}
-                className="snap-center shrink-0 w-full block"
-              >
-                <img
-                  src={banner.image}
-                  alt="Баннер"
-                  className="w-full h-auto object-cover"
-                />
-              </Link>
-            ))}
+            {banners.map((banner) => {
+              const href = banner.link || "/catalog";
+              const isExternal = href.startsWith("http");
+              return isExternal ? (
+                <a
+                  key={banner.id}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="snap-center shrink-0 w-full block"
+                >
+                  <img
+                    src={banner.image}
+                    alt="Баннер"
+                    className="w-full h-auto object-cover"
+                  />
+                </a>
+              ) : (
+                <Link
+                  key={banner.id}
+                  href={href}
+                  className="snap-center shrink-0 w-full block"
+                >
+                  <img
+                    src={banner.image}
+                    alt="Баннер"
+                    className="w-full h-auto object-cover"
+                  />
+                </Link>
+              );
+            })}
           </div>
           {banners.length > 1 && (
             <div className="flex justify-center gap-1.5 py-2.5 bg-brand-50">
@@ -102,10 +134,9 @@ export default function HomePage() {
         </div>
         <div className="flex gap-3 overflow-x-auto snap-x scrollbar-hide pb-2 px-4">
           {storeBrands.map((brand) => (
-            <Link
+            <div
               key={brand.id}
-              href={`/catalog?brand=${brand.slug}`}
-              className="snap-start shrink-0 w-28 flex flex-col items-center gap-2 transition-colors active:opacity-80"
+              className="snap-start shrink-0 w-28 flex flex-col items-center gap-2"
             >
               <div className="w-28 h-28 bg-brand-50 border border-brand-100 flex items-center justify-center overflow-hidden">
                 {brand.image ? (
@@ -117,7 +148,7 @@ export default function HomePage() {
                 )}
               </div>
               <span className="text-xs font-medium text-brand-700 text-center leading-tight">{brand.name}</span>
-            </Link>
+            </div>
           ))}
         </div>
       </section>
@@ -132,7 +163,7 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            {featured.slice(0, 6).map((product) => (
+            {featured.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
@@ -149,7 +180,7 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            {newArrivals.slice(0, 4).map((product) => (
+            {newArrivals.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
@@ -166,14 +197,14 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            {hits.slice(0, 4).map((product) => (
+            {hits.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
         </section>
       )}
 
-      {products.length === 0 && (
+      {!hasProducts && (
         <div className="text-center py-16 px-4">
           <p className="text-brand-400 text-sm">Товаров пока нет. Загрузите данные в админке.</p>
           <Link href="/admin" className="text-xs text-brand-900 underline mt-2 inline-block">

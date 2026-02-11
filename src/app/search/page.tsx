@@ -1,45 +1,54 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { formatPrice } from "@/lib/data";
+import { Product } from "@/lib/types";
 import { IconChevronLeft, IconSearch, IconX } from "@/components/Icons";
 import { WatchImage } from "@/components/WatchImage";
-import { useProductsStore } from "@/store/products";
+import { useBrandsStore } from "@/store/brands";
 
 export default function SearchPage() {
-  const fetchProducts = useProductsStore((s) => s.fetchProducts);
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
-  const products = useProductsStore((s) => s.products);
+  const fetchBrands = useBrandsStore((s) => s.fetchBrands);
+  const brands = useBrandsStore((s) => s.brands);
+  useEffect(() => { fetchBrands(); }, [fetchBrands]);
+
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [results, setResults] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  const results = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    if (q.length < 2) return [];
-    return products.filter(
-      (p) =>
-        p.sku.toLowerCase().includes(q) ||
-        p.name.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q)
-    );
-  }, [query, products]);
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
 
-  const suggestions = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    if (q.length < 1) return [];
-    const set = new Set<string>();
-    products.forEach((p) => {
-      if (p.brand.toLowerCase().includes(q)) set.add(p.brand);
-      if (p.name.toLowerCase().includes(q)) set.add(p.name);
-      if (p.sku.toLowerCase().includes(q)) set.add(p.sku);
+  // Fetch search results from API
+  useEffect(() => {
+    if (debouncedQuery.trim().length < 2) {
+      setResults([]);
+      setTotal(0);
+      return;
+    }
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "30",
+      search: debouncedQuery.trim(),
     });
-    return Array.from(set).slice(0, 5);
-  }, [query, products]);
+    fetch(`/api/products?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setResults(data.products || []);
+        setTotal(data.total || 0);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [debouncedQuery]);
 
-  const quickBrands = useMemo(() => {
-    const brands = [...new Set(products.map((p) => p.brand))];
-    return brands.slice(0, 4);
-  }, [products]);
+  const quickBrands = brands.slice(0, 4);
 
   return (
     <div className="max-w-lg mx-auto">
@@ -75,31 +84,25 @@ export default function SearchPage() {
             {quickBrands.length > 0 && (
               <div className="mt-6 flex flex-wrap justify-center gap-2">
                 {quickBrands.map((b) => (
-                  <button key={b} onClick={() => setQuery(b)} className="px-3 py-1.5 bg-brand-50 border border-brand-100 text-xs text-brand-700 transition-colors active:bg-brand-100">{b}</button>
+                  <button key={b.id} onClick={() => setQuery(b.name)} className="px-3 py-1.5 bg-brand-50 border border-brand-100 text-xs text-brand-700 transition-colors active:bg-brand-100">{b.name}</button>
                 ))}
               </div>
             )}
           </div>
         )}
 
-        {query && query.length < 2 && suggestions.length > 0 && (
-          <div>
-            <p className="text-xs text-brand-400 mb-2 uppercase tracking-wide">Подсказки</p>
-            {suggestions.map((s) => (
-              <button key={s} onClick={() => setQuery(s)} className="flex items-center gap-3 w-full py-2.5 text-left text-sm text-brand-700 border-b border-brand-50">
-                <IconSearch className="w-4 h-4 text-brand-300 shrink-0" />
-                {s}
-              </button>
-            ))}
+        {query && query.length < 2 && (
+          <div className="text-center py-12">
+            <p className="text-brand-400 text-sm">Введите минимум 2 символа</p>
           </div>
         )}
 
         {query.length >= 2 && (
           <>
             <p className="text-xs text-brand-500 mb-3">
-              {results.length > 0 ? `Найдено: ${results.length}` : "Ничего не найдено"}
+              {loading ? "Поиск..." : total > 0 ? `Найдено: ${total}` : "Ничего не найдено"}
             </p>
-            {results.length === 0 && (
+            {!loading && results.length === 0 && debouncedQuery.length >= 2 && (
               <div className="text-center py-12">
                 <p className="text-brand-400 text-sm">Попробуйте изменить запрос</p>
               </div>

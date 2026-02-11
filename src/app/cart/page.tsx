@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useSession, signIn } from "next-auth/react";
 import { useCartStore } from "@/store/cart";
 import { formatPrice, getDiscountedPrice } from "@/lib/data";
-import { IconChevronLeft, IconTrash, IconMinus, IconPlus } from "@/components/Icons";
+import { IconChevronLeft, IconTrash, IconMinus, IconPlus, IconTelegram, IconWhatsApp } from "@/components/Icons";
 import { WatchImage } from "@/components/WatchImage";
 import { useOrdersStore } from "@/store/orders";
+import { useSettingsStore } from "@/store/settings";
 import { OrderItem } from "@/lib/types";
 
 export default function CartPage() {
@@ -18,11 +19,15 @@ export default function CartPage() {
   const decrementItem = useCartStore((s) => s.decrementItem);
   const clearCart = useCartStore((s) => s.clearCart);
   const addOrder = useOrdersStore((s) => s.addOrder);
+  const { telegramUsername, whatsappPhone, fetchSettings } = useSettingsStore();
   const total = items.reduce((sum, i) => sum + getDiscountedPrice(i.product.retailPrice, i.product.discount) * i.quantity, 0);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
 
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [orderText, setOrderText] = useState("");
+
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   async function handleSubmitOrder() {
     if (!session?.user?.userId) return;
@@ -39,7 +44,20 @@ export default function CartPage() {
       quantity: i.quantity,
     }));
 
+    const lines = orderItems.map(
+      (i) => `${i.brand} ${i.name || i.sku} x${i.quantity} — ${formatPrice(i.finalPrice * i.quantity)}`
+    );
+    const text = [
+      `Заказ REXOR`,
+      `Покупатель: ${session.user.name || ""} (${session.user.email || ""})`,
+      ``,
+      ...lines,
+      ``,
+      `Итого: ${formatPrice(total)}`,
+    ].join("\n");
+
     await addOrder(orderItems, total, session.user.userId);
+    setOrderText(text);
     clearCart();
     setSubmitting(false);
     setSuccess(true);
@@ -57,10 +75,35 @@ export default function CartPage() {
             <div className="w-10" />
           </div>
         </header>
-        <div className="text-center py-20 px-4">
+        <div className="text-center py-12 px-4">
           <div className="text-4xl mb-4">&#10003;</div>
           <p className="text-brand-900 font-medium mb-2">Заказ оформлен!</p>
-          <p className="text-sm text-brand-500 mb-6">Вы можете отслеживать статус в профиле</p>
+          <p className="text-sm text-brand-500 mb-6">Отправьте заказ нам для подтверждения:</p>
+          <div className="flex flex-col gap-2.5 items-center max-w-xs mx-auto">
+            {telegramUsername && (
+              <a
+                href={`https://t.me/${telegramUsername}?text=${encodeURIComponent(orderText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full h-12 flex items-center justify-center gap-2.5 bg-[#2AABEE] text-white text-sm font-medium tracking-wide"
+              >
+                <IconTelegram className="w-5 h-5" />
+                Отправить в Telegram
+              </a>
+            )}
+            {whatsappPhone && (
+              <a
+                href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(orderText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full h-12 flex items-center justify-center gap-2.5 bg-[#25D366] text-white text-sm font-medium tracking-wide"
+              >
+                <IconWhatsApp className="w-5 h-5" />
+                Отправить в WhatsApp
+              </a>
+            )}
+          </div>
+          <p className="text-[11px] text-brand-400 mt-4 mb-6">Вы также можете отслеживать статус заказа в профиле</p>
           <div className="flex flex-col gap-2 items-center">
             <Link href="/profile" className="inline-block bg-brand-900 text-white text-xs tracking-[0.15em] uppercase px-6 py-3">
               Мои заказы

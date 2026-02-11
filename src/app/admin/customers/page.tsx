@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { formatPrice } from "@/lib/data";
+import { IconSearch } from "@/components/Icons";
 
 interface UserRow {
   id: string;
@@ -14,9 +15,13 @@ interface UserRow {
   totalSpent: number;
 }
 
+const PER_PAGE = 20;
+
 export default function AdminCustomersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     fetch("/api/admin/customers")
@@ -24,6 +29,19 @@ export default function AdminCustomersPage() {
       .then((data) => setUsers(data.users || []))
       .finally(() => setLoading(false));
   }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q)
+    );
+  }, [users, search]);
+
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString("ru", { day: "2-digit", month: "2-digit", year: "2-digit" });
@@ -39,11 +57,29 @@ export default function AdminCustomersPage() {
         Клиенты ({users.length})
       </h2>
 
-      {users.length === 0 ? (
+      {users.length > 0 && (
+        <div className="relative mb-4">
+          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-400" />
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Поиск по имени или email..."
+            className="w-full h-10 pl-9 pr-4 bg-brand-50 border border-brand-100 text-sm outline-none focus:border-brand-300"
+          />
+        </div>
+      )}
+
+      {filtered.length > 0 && filtered.length !== users.length && (
+        <p className="text-[11px] text-brand-400 mb-2">Найдено: {filtered.length}</p>
+      )}
+
+      {filtered.length === 0 && users.length > 0 ? (
+        <p className="text-sm text-brand-400 text-center py-16">Ничего не найдено.</p>
+      ) : filtered.length === 0 ? (
         <p className="text-sm text-brand-400 text-center py-16">Пока нет зарегистрированных пользователей.</p>
       ) : (
         <div className="space-y-2">
-          {users.map((user) => (
+          {paginated.map((user) => (
             <div key={user.id} className="bg-brand-50 border border-brand-100 p-3">
               <div className="flex items-center gap-3">
                 {user.image ? (
@@ -70,6 +106,42 @@ export default function AdminCustomersPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1 py-5">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
+          >
+            &lsaquo;
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter((pg) => pg === 1 || pg === totalPages || Math.abs(pg - page) <= 2)
+            .map((pg, idx, arr) => (
+              <span key={pg} className="contents">
+                {idx > 0 && arr[idx - 1] !== pg - 1 && (
+                  <span className="text-brand-300 text-xs px-1">&hellip;</span>
+                )}
+                <button
+                  onClick={() => setPage(pg)}
+                  className={`w-8 h-8 flex items-center justify-center text-xs border ${
+                    pg === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white"
+                  }`}
+                >
+                  {pg}
+                </button>
+              </span>
+            ))}
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
+          >
+            &rsaquo;
+          </button>
         </div>
       )}
     </div>

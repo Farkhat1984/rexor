@@ -1,23 +1,29 @@
 "use client";
 
-import { useState, useRef, useMemo, useEffect } from "react";
-import { useProductsStore } from "@/store/products";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { parseExcelFile } from "@/lib/parseExcel";
 import { formatPrice } from "@/lib/data";
 import { Product } from "@/lib/types";
 import { IconPlus, IconTrash, IconSearch } from "@/components/Icons";
+import { convertToWebP } from "@/lib/imageUtils";
 
 const PER_PAGE = 20;
-
 const GENDER_OPTIONS = ["мужской", "женский", "мужские", "женские", "унисекс"];
 
-export default function AdminProductsPage() {
-  const { products, addProducts, addProduct, removeProduct, updateProduct, toggleNew, toggleHit, toggleMain, fetchProducts } =
-    useProductsStore();
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
-  const fileRef = useRef<HTMLInputElement>(null);
+let debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
+export default function AdminProductsPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalAll, setTotalAll] = useState(0);
+  const [totalStock, setTotalStock] = useState(0);
+  const [totalRetail, setTotalRetail] = useState(0);
+  const [brandOptions, setBrandOptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fileRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterGender, setFilterGender] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
   const [page, setPage] = useState(1);
@@ -25,24 +31,45 @@ export default function AdminProductsPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
   const imageRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [stockConfirm, setStockConfirm] = useState<{
+    productId: string;
+    name: string;
+    oldVal: number;
+    newVal: number;
+  } | null>(null);
 
-  const brandOptions = useMemo(
-    () => [...new Set(products.map((p) => p.brand))].sort(),
-    [products]
-  );
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return products.filter((p) => {
-      if (q && !p.sku.toLowerCase().includes(q) && !p.brand.toLowerCase().includes(q) && !p.name.toLowerCase().includes(q)) return false;
-      if (filterGender && !p.gender.toLowerCase().startsWith(filterGender)) return false;
-      if (filterBrand && p.brand !== filterBrand) return false;
-      return true;
-    });
-  }, [products, search, filterGender, filterBrand]);
+  // Fetch products from API
+  const fetchPage = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", String(PER_PAGE));
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (filterBrand) params.set("brand", filterBrand);
+    if (filterGender) params.set("gender", filterGender);
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+    setLoading(true);
+    fetch(`/api/products?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setProducts(data.products || []);
+        setTotal(data.total || 0);
+        setTotalAll(data.stats?.totalAll || 0);
+        setTotalStock(data.stats?.totalStock || 0);
+        setTotalRetail(data.stats?.totalRetail || 0);
+        setBrandOptions(data.filterOptions?.brands || []);
+      })
+      .finally(() => setLoading(false));
+  }, [page, debouncedSearch, filterBrand, filterGender]);
+
+  useEffect(() => { fetchPage(); }, [fetchPage]);
+
+  const totalPages = Math.ceil(total / PER_PAGE);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -50,16 +77,21 @@ export default function AdminProductsPage() {
     try {
       const buffer = await file.arrayBuffer();
       const parsed = parseExcelFile(buffer);
-      addProducts(parsed);
+      await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
       setUploadMsg(`Загружено ${parsed.length} товаров из "${file.name}"`);
       setPage(1);
+      fetchPage();
     } catch {
       setUploadMsg("Ошибка при чтении файла");
     }
     e.target.value = "";
   }
 
-  function handleAddManual() {
+  async function handleAddManual() {
     const p: Product = {
       id: String(Date.now()),
       barcode: "",
@@ -91,21 +123,57 @@ export default function AdminProductsPage() {
       retailPrice: 0,
       images: [],
     };
-    addProduct(p);
+    await fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
     setEditingId(p.id);
     setPage(1);
+    // Small delay to let DB commit, then refetch
+    setTimeout(() => fetchPage(), 100);
   }
 
-  function handleImageUpload(productId: string, file: File) {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      const product = products.find((p) => p.id === productId);
-      if (product) {
-        updateProduct(productId, { images: [...product.images, result] });
-      }
-    };
-    reader.readAsDataURL(file);
+  function updateProduct(id: string, data: Partial<Product>) {
+    // Optimistic local update
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+    // Debounced API call
+    clearTimeout(debounceTimers[id]);
+    debounceTimers[id] = setTimeout(() => {
+      const serialized: Record<string, unknown> = { ...data };
+      if ("images" in data) serialized.images = data.images;
+      fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    }, 500);
+  }
+
+  async function removeProduct(id: string) {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    await fetch(`/api/products/${id}`, { method: "DELETE" });
+    fetchPage();
+  }
+
+  async function toggleFlag(id: string, flag: "isNew" | "isHit" | "showOnMain") {
+    const p = products.find((x) => x.id === id);
+    if (!p) return;
+    const val = !p[flag];
+    setProducts((prev) => prev.map((x) => (x.id === id ? { ...x, [flag]: val } : x)));
+    await fetch(`/api/products/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [flag]: val }),
+    });
+  }
+
+  async function handleImageUpload(productId: string, file: File) {
+    const webp = await convertToWebP(file);
+    const product = products.find((p) => p.id === productId);
+    if (product) {
+      updateProduct(productId, { images: [...product.images, webp] });
+    }
   }
 
   function removeImage(productId: string, idx: number) {
@@ -115,15 +183,12 @@ export default function AdminProductsPage() {
     }
   }
 
-  const totalStock = products.reduce((s, p) => s + p.stock, 0);
-  const totalRetail = products.reduce((s, p) => s + p.retailPrice * p.stock, 0);
-
   return (
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-heading text-lg text-brand-900">
-          Склад ({products.length} поз. / {totalStock} шт.)
+          Склад ({totalAll} поз. / {totalStock} шт.)
         </h2>
         <div className="flex gap-1.5">
           <button
@@ -204,12 +269,14 @@ export default function AdminProductsPage() {
             </button>
           )}
         </div>
-        <p className="text-[11px] text-brand-400">Найдено: {filtered.length}</p>
+        <p className="text-[11px] text-brand-400">
+          {loading ? "Загрузка..." : `Найдено: ${total}`}
+        </p>
       </div>
 
       {/* Product list */}
       <div className="space-y-2">
-        {paginated.map((p) => (
+        {products.map((p) => (
           <div key={p.id} className="bg-brand-50 border border-brand-100 p-3">
             <div className="flex gap-3">
               <div
@@ -247,28 +314,48 @@ export default function AdminProductsPage() {
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   <span className="text-xs font-bold text-brand-900">{formatPrice(p.retailPrice)}</span>
                   <span className="text-[10px] text-brand-400">Арт. {p.sku}</span>
-                  <span className={`text-[10px] font-medium ${p.stock > 0 ? "text-green-700" : "text-red-600"}`}>
-                    Остаток: {p.stock}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className={`text-[10px] font-medium shrink-0 ${p.stock > 0 ? "text-green-700" : "text-red-600"}`}>
+                    Остаток:
                   </span>
+                  <input
+                    type="number"
+                    id={`stock-${p.id}`}
+                    defaultValue={p.stock}
+                    className="w-16 h-6 px-1.5 bg-white border border-brand-200 text-[11px] text-brand-900 outline-none focus:border-brand-400"
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.getElementById(`stock-${p.id}`) as HTMLInputElement;
+                      const newVal = Number(input.value) || 0;
+                      const oldVal = p.stock;
+                      if (newVal === oldVal) return;
+                      setStockConfirm({ productId: p.id, name: p.name || p.sku, oldVal, newVal });
+                    }}
+                    className="h-6 px-2 bg-brand-900 text-white text-[10px]"
+                  >
+                    OK
+                  </button>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 mt-2 pt-2 border-t border-brand-200 flex-wrap">
               <button
-                onClick={() => toggleNew(p.id)}
+                onClick={() => toggleFlag(p.id, "isNew")}
                 className={`text-[10px] px-2 py-0.5 border ${p.isNew ? "bg-brand-900 text-white border-brand-900" : "text-brand-500 border-brand-200"}`}
               >
                 Новинка
               </button>
               <button
-                onClick={() => toggleHit(p.id)}
+                onClick={() => toggleFlag(p.id, "isHit")}
                 className={`text-[10px] px-2 py-0.5 border ${p.isHit ? "bg-brand-900 text-white border-brand-900" : "text-brand-500 border-brand-200"}`}
               >
                 Хит
               </button>
               <button
-                onClick={() => toggleMain(p.id)}
+                onClick={() => toggleFlag(p.id, "showOnMain")}
                 className={`text-[10px] px-2 py-0.5 border ${p.showOnMain ? "bg-green-700 text-white border-green-700" : "text-brand-500 border-brand-200"}`}
               >
                 На главную
@@ -353,7 +440,6 @@ export default function AdminProductsPage() {
 
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    ["stock", "Остаток (шт)"],
                     ["retailPrice", "Розничная цена"],
                     ["purchasePrice", "Цена закупа"],
                     ["costPrice", "Себестоимость"],
@@ -412,9 +498,66 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {products.length === 0 && (
+      {!loading && totalAll === 0 && (
         <div className="text-center py-16 text-brand-400 text-sm">
           Товаров пока нет. Загрузите Excel или добавьте вручную.
+        </div>
+      )}
+
+      {/* Stock confirmation modal */}
+      {stockConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-brand-950/60 backdrop-blur-sm" onClick={() => {
+            const input = document.getElementById(`stock-${stockConfirm.productId}`) as HTMLInputElement;
+            if (input) input.value = String(stockConfirm.oldVal);
+            setStockConfirm(null);
+          }} />
+          <div className="relative bg-white border border-brand-200 shadow-lg w-full max-w-xs">
+            <div className="bg-brand-900 px-4 py-3">
+              <p className="text-white text-xs font-heading tracking-wide uppercase">Изменение остатка</p>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-brand-700 leading-snug">
+                {stockConfirm.name}
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <div className="text-center">
+                  <p className="text-[10px] text-brand-400 uppercase tracking-wide">Было</p>
+                  <p className="text-2xl font-heading font-bold text-brand-900 mt-0.5">{stockConfirm.oldVal}</p>
+                  <p className="text-[10px] text-brand-400">шт.</p>
+                </div>
+                <div className="text-brand-300 text-xl">&rarr;</div>
+                <div className="text-center">
+                  <p className="text-[10px] text-brand-400 uppercase tracking-wide">Стало</p>
+                  <p className={`text-2xl font-heading font-bold mt-0.5 ${stockConfirm.newVal > stockConfirm.oldVal ? "text-green-700" : stockConfirm.newVal < stockConfirm.oldVal ? "text-red-600" : "text-brand-900"}`}>
+                    {stockConfirm.newVal}
+                  </p>
+                  <p className="text-[10px] text-brand-400">шт.</p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    const input = document.getElementById(`stock-${stockConfirm.productId}`) as HTMLInputElement;
+                    if (input) input.value = String(stockConfirm.oldVal);
+                    setStockConfirm(null);
+                  }}
+                  className="flex-1 h-9 border border-brand-200 text-brand-700 text-xs tracking-wide"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => {
+                    updateProduct(stockConfirm.productId, { stock: stockConfirm.newVal });
+                    setStockConfirm(null);
+                  }}
+                  className="flex-1 h-9 bg-brand-900 text-white text-xs tracking-wide"
+                >
+                  Подтвердить
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

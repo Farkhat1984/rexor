@@ -6,7 +6,9 @@ export function GET() {
   const db = getDb();
   const banners = db.prepare("SELECT * FROM banners ORDER BY rowid").all()
     .map((b: any) => ({ ...b, active: !!b.active }));
-  return NextResponse.json(banners);
+  return NextResponse.json(banners, {
+    headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+  });
 }
 
 export async function POST(req: NextRequest) {

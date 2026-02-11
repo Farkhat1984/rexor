@@ -5,7 +5,9 @@ import { requireAdmin } from "@/lib/admin-guard";
 export function GET() {
   const db = getDb();
   const brands = db.prepare("SELECT * FROM brands ORDER BY rowid").all();
-  return NextResponse.json(brands);
+  return NextResponse.json(brands, {
+    headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+  });
 }
 
 export async function POST(req: NextRequest) {

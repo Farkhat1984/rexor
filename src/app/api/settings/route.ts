@@ -10,6 +10,8 @@ export function GET() {
   return NextResponse.json({
     telegramUsername: settings.telegramUsername || "rexor_watches",
     whatsappPhone: settings.whatsappPhone || "77001234567",
+  }, {
+    headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
   });
 }
 

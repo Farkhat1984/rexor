@@ -1,32 +1,13 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { useBannersStore } from "@/store/banners";
+import { useBannersStore, Banner } from "@/store/banners";
 import { IconPlus, IconTrash } from "@/components/Icons";
+import { convertToWebP } from "@/lib/imageUtils";
 
-const MAX_WIDTH = 800;
-const QUALITY = 0.7;
+const PER_PAGE = 10;
 
-function compressImage(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      let w = img.width;
-      let h = img.height;
-      if (w > MAX_WIDTH) {
-        h = Math.round(h * (MAX_WIDTH / w));
-        w = MAX_WIDTH;
-      }
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/webp", QUALITY));
-    };
-    img.src = URL.createObjectURL(file);
-  });
-}
+const linkTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
 export default function AdminBannersPage() {
   const { banners, addBanner, removeBanner, toggleActive, updateBanner, fetchBanners } =
@@ -34,11 +15,28 @@ export default function AdminBannersPage() {
   useEffect(() => { fetchBanners(); }, [fetchBanners]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [newLink, setNewLink] = useState("/catalog");
+  const [page, setPage] = useState(1);
+  const [localLinks, setLocalLinks] = useState<Record<string, string>>({});
+
+  function handleLinkChange(id: string, value: string) {
+    setLocalLinks((prev) => ({ ...prev, [id]: value }));
+    clearTimeout(linkTimers[id]);
+    linkTimers[id] = setTimeout(() => {
+      updateBanner(id, { link: value });
+    }, 500);
+  }
+
+  function getLinkValue(banner: Banner) {
+    return localLinks[banner.id] !== undefined ? localLinks[banner.id] : banner.link;
+  }
+
+  const totalPages = Math.ceil(banners.length / PER_PAGE);
+  const paginated = banners.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   async function handleAddImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const base64 = await compressImage(file);
+    const base64 = await convertToWebP(file, 800, 0.7);
     addBanner(base64, newLink);
     setNewLink("/catalog");
     e.target.value = "";
@@ -51,7 +49,7 @@ export default function AdminBannersPage() {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      const base64 = await compressImage(file);
+      const base64 = await convertToWebP(file, 800, 0.7);
       updateBanner(bannerId, { image: base64 });
     };
     input.click();
@@ -98,7 +96,7 @@ export default function AdminBannersPage() {
 
       {/* Banner list */}
       <div className="space-y-3">
-        {banners.map((banner) => (
+        {paginated.map((banner) => (
           <div
             key={banner.id}
             className="bg-brand-50 border border-brand-100 p-3"
@@ -122,10 +120,9 @@ export default function AdminBannersPage() {
             <div className="mb-2">
               <label className="text-[10px] text-brand-400">Ссылка при клике</label>
               <input
-                value={banner.link}
-                onChange={(e) =>
-                  updateBanner(banner.id, { link: e.target.value })
-                }
+                value={getLinkValue(banner)}
+                onChange={(e) => handleLinkChange(banner.id, e.target.value)}
+                placeholder="/catalog?brand=tissot или https://..."
                 className="w-full text-xs text-brand-900 bg-white border border-brand-200 px-2 py-1.5 outline-none focus:border-brand-400"
               />
             </div>
@@ -152,6 +149,42 @@ export default function AdminBannersPage() {
           </div>
         ))}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1 py-5">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
+          >
+            &lsaquo;
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter((pg) => pg === 1 || pg === totalPages || Math.abs(pg - page) <= 2)
+            .map((pg, idx, arr) => (
+              <span key={pg} className="contents">
+                {idx > 0 && arr[idx - 1] !== pg - 1 && (
+                  <span className="text-brand-300 text-xs px-1">&hellip;</span>
+                )}
+                <button
+                  onClick={() => setPage(pg)}
+                  className={`w-8 h-8 flex items-center justify-center text-xs border ${
+                    pg === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white"
+                  }`}
+                >
+                  {pg}
+                </button>
+              </span>
+            ))}
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
+          >
+            &rsaquo;
+          </button>
+        </div>
+      )}
 
       {banners.length === 0 && (
         <p className="text-center text-sm text-brand-400 py-8">

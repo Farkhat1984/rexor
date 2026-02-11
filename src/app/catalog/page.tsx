@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { brands, formatPrice } from "@/lib/data";
-import { SortOption } from "@/lib/types";
+import { formatPrice } from "@/lib/data";
+import { Product, SortOption } from "@/lib/types";
 import { ProductCard } from "@/components/ProductCard";
 import { IconFilter, IconSort, IconX, IconChevronLeft, IconSearch } from "@/components/Icons";
-import { useProductsStore } from "@/store/products";
+import { useBrandsStore } from "@/store/brands";
 
 const sortLabels: Record<SortOption, string> = {
   popular: "Популярные",
@@ -28,44 +28,129 @@ interface Filters {
   priceMax: number;
 }
 
+interface FilterOptions {
+  brands: string[];
+  genders: string[];
+  mechanisms: string[];
+  caseShapes: string[];
+  priceRange: { min: number; max: number };
+}
+
+const PER_PAGE = 10;
+
+const defaultFilters: Filters = {
+  brand: [],
+  gender: [],
+  mechanism: [],
+  caseShape: [],
+  priceMin: 0,
+  priceMax: 0,
+};
+
 function CatalogContent() {
-  const fetchProducts = useProductsStore((s) => s.fetchProducts);
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
-  const products = useProductsStore((s) => s.products).filter((p) => p.stock > 0);
+  const fetchBrands = useBrandsStore((s) => s.fetchBrands);
+  const allBrands = useBrandsStore((s) => s.brands);
+  useEffect(() => { fetchBrands(); }, [fetchBrands]);
+
   const searchParams = useSearchParams();
   const initialBrandSlug = searchParams.get("brand") || "";
   const initialSort = (searchParams.get("sort") as SortOption) || "";
-  const initialBrandName = brands.find((b) => b.slug === initialBrandSlug)?.name || "";
 
-  const priceList = products.map((p) => p.retailPrice);
-  const PRICE_MIN = priceList.length ? Math.min(...priceList) : 0;
-  const PRICE_MAX = priceList.length ? Math.max(...priceList) : 999999;
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
+    brands: [], genders: [], mechanisms: [], caseShapes: [], priceRange: { min: 0, max: 999999 },
+  });
+  const [loading, setLoading] = useState(true);
 
-  const defaultFilters: Filters = {
-    brand: [],
-    gender: [],
-    mechanism: [],
-    caseShape: [],
-    priceMin: PRICE_MIN,
-    priceMax: PRICE_MAX,
-  };
-
-  const [filters, setFilters] = useState<Filters>(() => ({
-    ...defaultFilters,
-    brand: initialBrandName ? [initialBrandName] : [],
-  }));
+  const [filters, setFilters] = useState<Filters>({ ...defaultFilters });
   const [sort, setSort] = useState<SortOption | "">(initialSort);
-  const [showFilters, setShowFilters] = useState(false);
-  const [showSort, setShowSort] = useState(false);
-  const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
-  const PER_PAGE = 10;
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const uniqueBrands = useMemo(() => [...new Set(products.map((p) => p.brand))].sort(), [products]);
-  const uniqueGenders = useMemo(() => [...new Set(products.map((p) => p.gender))].sort(), [products]);
-  const uniqueMechanisms = useMemo(() => [...new Set(products.map((p) => p.mechanism))].sort(), [products]);
-  const uniqueShapes = useMemo(() => [...new Set(products.map((p) => p.caseShape))].filter(Boolean).sort(), [products]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showSort, setShowSort] = useState(false);
+  const [draftFilters, setDraftFilters] = useState<Filters>({ ...defaultFilters });
+  const [draftCount, setDraftCount] = useState<number | null>(null);
+
+  // Set initial brand from URL slug once brands load
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!initialBrandSlug || initializedRef.current) return;
+    if (allBrands.length === 0) return;
+    const brand = allBrands.find((b) => b.slug === initialBrandSlug);
+    if (brand) {
+      setFilters((prev) => ({ ...prev, brand: [brand.name] }));
+    }
+    initializedRef.current = true;
+  }, [allBrands, initialBrandSlug]);
+
+  // Skip initial fetch if waiting for brand slug resolution
+  const ready = !initialBrandSlug || initializedRef.current;
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch products from API
+  const fetchProducts = useCallback(() => {
+    if (!ready) return;
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", String(PER_PAGE));
+    params.set("inStock", "true");
+    if (debouncedSearch.length >= 2) params.set("search", debouncedSearch);
+    if (filters.brand.length) params.set("brand", filters.brand.join(","));
+    if (filters.gender.length) params.set("gender", filters.gender.join(","));
+    if (filters.mechanism.length) params.set("mechanism", filters.mechanism.join(","));
+    if (filters.caseShape.length) params.set("caseShape", filters.caseShape.join(","));
+    if (filters.priceMin > 0) params.set("priceMin", String(filters.priceMin));
+    if (filters.priceMax > 0) params.set("priceMax", String(filters.priceMax));
+    if (sort) params.set("sort", sort);
+
+    setLoading(true);
+    fetch(`/api/products?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setProducts(data.products);
+        setTotal(data.total);
+        setFilterOptions(data.filterOptions);
+      })
+      .finally(() => setLoading(false));
+  }, [page, filters, sort, debouncedSearch, ready]);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  // Draft count for filter preview
+  useEffect(() => {
+    if (!showFilters) return;
+    setDraftCount(null);
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("limit", "1");
+      params.set("inStock", "true");
+      params.set("countOnly", "true");
+      if (draftFilters.brand.length) params.set("brand", draftFilters.brand.join(","));
+      if (draftFilters.gender.length) params.set("gender", draftFilters.gender.join(","));
+      if (draftFilters.mechanism.length) params.set("mechanism", draftFilters.mechanism.join(","));
+      if (draftFilters.caseShape.length) params.set("caseShape", draftFilters.caseShape.join(","));
+      if (draftFilters.priceMin > 0) params.set("priceMin", String(draftFilters.priceMin));
+      if (draftFilters.priceMax > 0) params.set("priceMax", String(draftFilters.priceMax));
+      if (debouncedSearch.length >= 2) params.set("search", debouncedSearch);
+
+      fetch(`/api/products?${params}`)
+        .then((r) => r.json())
+        .then((data) => setDraftCount(data.total))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [showFilters, draftFilters, debouncedSearch]);
+
+  const totalPages = Math.ceil(total / PER_PAGE);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -73,50 +158,13 @@ function CatalogContent() {
     if (filters.gender.length) count += filters.gender.length;
     if (filters.mechanism.length) count += filters.mechanism.length;
     if (filters.caseShape.length) count += filters.caseShape.length;
-    if (filters.priceMin > PRICE_MIN) count++;
-    if (filters.priceMax < PRICE_MAX) count++;
+    if (filters.priceMin > 0) count++;
+    if (filters.priceMax > 0) count++;
     return count;
-  }, [filters, PRICE_MIN, PRICE_MAX]);
+  }, [filters]);
 
-  const filteredAndSorted = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    let result = products.filter((p) => {
-      if (q.length >= 2) {
-        const matches = p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
-        if (!matches) return false;
-      }
-      if (filters.brand.length && !filters.brand.includes(p.brand)) return false;
-      if (filters.gender.length && !filters.gender.includes(p.gender)) return false;
-      if (filters.mechanism.length && !filters.mechanism.includes(p.mechanism)) return false;
-      if (filters.caseShape.length && !filters.caseShape.includes(p.caseShape)) return false;
-      if (p.retailPrice < filters.priceMin || p.retailPrice > filters.priceMax) return false;
-      return true;
-    });
-
-    if (sort === "popular") result = [...result].sort((a, b) => (b.isHit ? 1 : 0) - (a.isHit ? 1 : 0));
-    else if (sort === "price_asc") result = [...result].sort((a, b) => a.retailPrice - b.retailPrice);
-    else if (sort === "price_desc") result = [...result].sort((a, b) => b.retailPrice - a.retailPrice);
-    else if (sort === "new") result = [...result].sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
-    else if (sort === "discount") result = [...result].sort((a, b) => (b.discount || 0) - (a.discount || 0));
-    else if (sort === "name_asc") result = [...result].sort((a, b) => a.name.localeCompare(b.name, "ru"));
-    else if (sort === "name_desc") result = [...result].sort((a, b) => b.name.localeCompare(a.name, "ru"));
-
-    return result;
-  }, [products, filters, sort, searchQuery]);
-
-  const totalPages = Math.ceil(filteredAndSorted.length / PER_PAGE);
-  const paginatedProducts = filteredAndSorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-
-  const draftCount = useMemo(() => {
-    return products.filter((p) => {
-      if (draftFilters.brand.length && !draftFilters.brand.includes(p.brand)) return false;
-      if (draftFilters.gender.length && !draftFilters.gender.includes(p.gender)) return false;
-      if (draftFilters.mechanism.length && !draftFilters.mechanism.includes(p.mechanism)) return false;
-      if (draftFilters.caseShape.length && !draftFilters.caseShape.includes(p.caseShape)) return false;
-      if (p.retailPrice < draftFilters.priceMin || p.retailPrice > draftFilters.priceMax) return false;
-      return true;
-    }).length;
-  }, [products, draftFilters]);
+  // Brand names from actual products in DB
+  const brandNames = filterOptions.brands;
 
   function openFilters() {
     setDraftFilters({ ...filters });
@@ -179,16 +227,22 @@ function CatalogContent() {
 
       <div className="px-4 py-3">
         <p className="text-sm text-brand-500">
-          {filteredAndSorted.length === 0 ? "Ничего не найдено" : `${filteredAndSorted.length} ${pluralize(filteredAndSorted.length)}`}
+          {loading ? "Загрузка..." : total === 0 ? "Ничего не найдено" : pluralize(total)}
           {sort && <span className="text-brand-400"> &middot; {sortLabels[sort]}</span>}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 px-4">
-        {paginatedProducts.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-      </div>
+      {loading && products.length === 0 ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-brand-200 border-t-brand-900 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2.5 px-4">
+          {products.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-1 py-5 px-4 overflow-x-auto scrollbar-hide">
@@ -216,10 +270,10 @@ function CatalogContent() {
         </div>
       )}
 
-      {filteredAndSorted.length === 0 && (
+      {!loading && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 px-6">
           <p className="text-brand-400 text-sm text-center">Попробуйте изменить фильтры или сбросить их</p>
-          <button onClick={() => { setFilters({ ...defaultFilters }); setSort(""); setPage(1); }} className="mt-4 text-sm font-medium text-brand-900 underline underline-offset-2">Сбросить все</button>
+          <button onClick={() => { setFilters({ ...defaultFilters }); setSort(""); setSearchQuery(""); setPage(1); }} className="mt-4 text-sm font-medium text-brand-900 underline underline-offset-2">Сбросить все</button>
         </div>
       )}
 
@@ -232,29 +286,46 @@ function CatalogContent() {
             <button onClick={() => setShowFilters(false)} className="flex items-center justify-center w-8 h-8" aria-label="Закрыть"><IconX className="w-5 h-5 text-brand-500" /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-            <FilterChips title="Бренд" items={uniqueBrands} selected={draftFilters.brand} onToggle={(v) => toggleDraftArray("brand", v)} />
-            <FilterChips title="Гендер" items={uniqueGenders} selected={draftFilters.gender} onToggle={(v) => toggleDraftArray("gender", v)} />
-            <FilterChips title="Механизм" items={uniqueMechanisms} selected={draftFilters.mechanism} onToggle={(v) => toggleDraftArray("mechanism", v)} />
-            <FilterChips title="Форма корпуса" items={uniqueShapes} selected={draftFilters.caseShape} onToggle={(v) => toggleDraftArray("caseShape", v)} />
+            {/* Brand chips - horizontal scroll */}
+            {brandNames.length > 0 && (
+              <section>
+                <h3 className="text-sm font-heading font-semibold text-brand-900 mb-2">Бренд</h3>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
+                  {brandNames.map((item) => {
+                    const active = draftFilters.brand.includes(item);
+                    return (
+                      <button key={item} onClick={() => toggleDraftArray("brand", item)} className={`px-3 py-1.5 text-xs rounded-full border transition-colors whitespace-nowrap shrink-0 ${active ? "bg-brand-900 text-white border-brand-900" : "bg-white text-brand-700 border-brand-200 active:bg-brand-50"}`}>
+                        {item}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+            <FilterChips title="Гендер" items={filterOptions.genders} selected={draftFilters.gender} onToggle={(v) => toggleDraftArray("gender", v)} />
+            <FilterChips title="Механизм" items={filterOptions.mechanisms} selected={draftFilters.mechanism} onToggle={(v) => toggleDraftArray("mechanism", v)} />
+            <FilterChips title="Форма корпуса" items={filterOptions.caseShapes} selected={draftFilters.caseShape} onToggle={(v) => toggleDraftArray("caseShape", v)} />
             <section>
               <h3 className="text-sm font-heading font-semibold text-brand-900 mb-2">Цена</h3>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
                   <label className="text-[11px] text-brand-400 mb-1 block">от</label>
-                  <input type="number" value={draftFilters.priceMin} onChange={(e) => setDraftFilters((prev) => ({ ...prev, priceMin: Number(e.target.value) || 0 }))} className="w-full h-10 px-3 border border-brand-200 rounded-lg text-sm text-brand-900 bg-white focus:outline-none focus:border-brand-400" />
+                  <input type="number" value={draftFilters.priceMin || ""} onChange={(e) => setDraftFilters((prev) => ({ ...prev, priceMin: Number(e.target.value) || 0 }))} placeholder={String(filterOptions.priceRange.min)} className="w-full h-10 px-3 border border-brand-200 rounded-lg text-sm text-brand-900 bg-white focus:outline-none focus:border-brand-400" />
                 </div>
                 <span className="text-brand-300 mt-4">&ndash;</span>
                 <div className="flex-1">
                   <label className="text-[11px] text-brand-400 mb-1 block">до</label>
-                  <input type="number" value={draftFilters.priceMax} onChange={(e) => setDraftFilters((prev) => ({ ...prev, priceMax: Number(e.target.value) || 0 }))} className="w-full h-10 px-3 border border-brand-200 rounded-lg text-sm text-brand-900 bg-white focus:outline-none focus:border-brand-400" />
+                  <input type="number" value={draftFilters.priceMax || ""} onChange={(e) => setDraftFilters((prev) => ({ ...prev, priceMax: Number(e.target.value) || 0 }))} placeholder={String(filterOptions.priceRange.max)} className="w-full h-10 px-3 border border-brand-200 rounded-lg text-sm text-brand-900 bg-white focus:outline-none focus:border-brand-400" />
                 </div>
               </div>
-              <p className="text-[11px] text-brand-400 mt-1.5">{formatPrice(PRICE_MIN)} &mdash; {formatPrice(PRICE_MAX)}</p>
+              <p className="text-[11px] text-brand-400 mt-1.5">{formatPrice(filterOptions.priceRange.min)} &mdash; {formatPrice(filterOptions.priceRange.max)}</p>
             </section>
           </div>
           <div className="flex items-center gap-3 px-4 py-4 border-t border-brand-100 bg-white">
             <button onClick={resetDraftFilters} className="flex-1 h-11 text-sm font-medium text-brand-700 border border-brand-200 rounded-lg active:bg-brand-50">Сбросить</button>
-            <button onClick={applyFilters} className="flex-[2] h-11 text-sm font-medium text-white bg-brand-900 rounded-lg active:bg-brand-800">Показать ({draftCount})</button>
+            <button onClick={applyFilters} className="flex-[2] h-11 text-sm font-medium text-white bg-brand-900 rounded-lg active:bg-brand-800">
+              Показать{draftCount !== null ? ` (${draftCount})` : ""}
+            </button>
           </div>
         </div>
       </div>
