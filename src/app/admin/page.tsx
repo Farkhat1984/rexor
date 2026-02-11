@@ -37,6 +37,12 @@ export default function AdminProductsPage() {
     oldVal: number;
     newVal: number;
   } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    productId: string;
+    name: string;
+    brand: string;
+    stock: number;
+  } | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -151,7 +157,14 @@ export default function AdminProductsPage() {
   }
 
   async function removeProduct(id: string) {
+    const removed = products.find((p) => p.id === id);
     setProducts((prev) => prev.filter((p) => p.id !== id));
+    if (removed) {
+      setTotalAll((v) => Math.max(0, v - 1));
+      setTotalStock((v) => Math.max(0, v - removed.stock));
+      setTotalRetail((v) => Math.max(0, v - removed.retailPrice * removed.stock));
+      setTotal((v) => Math.max(0, v - 1));
+    }
     await fetch(`/api/products/${id}`, { method: "DELETE" });
     fetchPage();
   }
@@ -307,7 +320,7 @@ export default function AdminProductsPage() {
                     <p className="text-[10px] text-brand-500">{p.brand}</p>
                     <p className="text-sm font-medium text-brand-900 line-clamp-1">{p.name || p.sku}</p>
                   </div>
-                  <button onClick={() => removeProduct(p.id)} className="text-brand-400 p-1">
+                  <button onClick={() => setDeleteConfirm({ productId: p.id, name: p.name || p.sku, brand: p.brand, stock: p.stock })} className="text-brand-400 p-1">
                     <IconTrash className="w-4 h-4" />
                   </button>
                 </div>
@@ -504,6 +517,50 @@ export default function AdminProductsPage() {
         </div>
       )}
 
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-brand-950/60 backdrop-blur-sm" onClick={() => setDeleteConfirm(null)} />
+          <div className="relative bg-white border border-brand-200 shadow-lg w-full max-w-xs">
+            <div className="bg-red-700 px-4 py-3">
+              <p className="text-white text-xs font-heading tracking-wide uppercase">Удаление товара</p>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <p className="text-[10px] text-brand-400">{deleteConfirm.brand}</p>
+                <p className="text-sm font-medium text-brand-900 leading-snug">{deleteConfirm.name}</p>
+              </div>
+              <div className="bg-brand-50 border border-brand-100 px-3 py-2">
+                <p className="text-[10px] text-brand-400">Остаток на складе</p>
+                <p className={`text-lg font-heading font-bold ${deleteConfirm.stock > 0 ? "text-red-600" : "text-brand-400"}`}>
+                  {deleteConfirm.stock} шт.
+                </p>
+              </div>
+              <p className="text-xs text-brand-500">
+                Вы действительно хотите удалить этот товар? Это действие нельзя отменить.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 h-9 border border-brand-200 text-brand-700 text-xs tracking-wide"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => {
+                    removeProduct(deleteConfirm.productId);
+                    setDeleteConfirm(null);
+                  }}
+                  className="flex-1 h-9 bg-red-700 text-white text-xs tracking-wide"
+                >
+                  Удалить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stock confirmation modal */}
       {stockConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -549,6 +606,7 @@ export default function AdminProductsPage() {
                 <button
                   onClick={() => {
                     updateProduct(stockConfirm.productId, { stock: stockConfirm.newVal });
+                    setTotalStock((v) => v + (stockConfirm.newVal - stockConfirm.oldVal));
                     setStockConfirm(null);
                   }}
                   className="flex-1 h-9 bg-brand-900 text-white text-xs tracking-wide"
