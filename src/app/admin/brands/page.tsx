@@ -2,15 +2,14 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useBrandsStore } from "@/store/brands";
-import { IconPlus, IconTrash, IconSearch } from "@/components/Icons";
+import { IconTrash, IconSearch } from "@/components/Icons";
 import { convertToWebP } from "@/lib/imageUtils";
 
 const PER_PAGE = 20;
 
 export default function AdminBrandsPage() {
-  const { brands, addBrand, removeBrand, updateBrand, fetchBrands } = useBrandsStore();
+  const { brands, removeBrand, updateBrand, fetchBrands } = useBrandsStore();
   useEffect(() => { fetchBrands(true); }, [fetchBrands]);
-  const [newName, setNewName] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -24,12 +23,6 @@ export default function AdminBrandsPage() {
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
-  function handleAdd() {
-    if (!newName.trim()) return;
-    addBrand(newName.trim());
-    setNewName("");
-  }
-
   async function handleImageUpload(brandId: string, file: File) {
     const webp = await convertToWebP(file, 400, 0.85);
     updateBrand(brandId, { image: webp });
@@ -37,26 +30,12 @@ export default function AdminBrandsPage() {
 
   return (
     <div>
-      <h2 className="font-heading text-lg text-brand-900 mb-4">
+      <h2 className="font-heading text-lg text-brand-900 mb-1">
         Бренды ({brands.length})
       </h2>
-
-      <div className="flex gap-2 mb-4">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Название бренда"
-          className="flex-1 h-10 px-3 bg-brand-50 border border-brand-100 text-sm outline-none focus:border-brand-300"
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-        />
-        <button
-          onClick={handleAdd}
-          className="h-10 px-4 bg-brand-900 text-white text-xs flex items-center gap-1"
-        >
-          <IconPlus className="w-3.5 h-3.5" />
-          Добавить
-        </button>
-      </div>
+      <p className="text-[10px] text-brand-400 mb-4">
+        Бренды создаются автоматически при загрузке товаров из Excel.
+      </p>
 
       {brands.length > 5 && (
         <div className="relative mb-4">
@@ -106,13 +85,7 @@ export default function AdminBrandsPage() {
               />
 
               <div className="flex-1 min-w-0">
-                <input
-                  value={brand.name}
-                  onChange={(e) =>
-                    updateBrand(brand.id, { name: e.target.value })
-                  }
-                  className="w-full text-sm font-medium text-brand-900 bg-transparent outline-none border-b border-transparent focus:border-brand-300"
-                />
+                <p className="text-sm font-medium text-brand-900">{brand.name}</p>
                 <p className="text-[10px] text-brand-400">/{brand.slug}</p>
               </div>
 
@@ -170,6 +143,12 @@ export default function AdminBrandsPage() {
           >
             &rsaquo;
           </button>
+        </div>
+      )}
+
+      {brands.length === 0 && (
+        <div className="text-center py-16 text-brand-400 text-sm">
+          Брендов пока нет. Загрузите товары из Excel — бренды появятся автоматически.
         </div>
       )}
     </div>

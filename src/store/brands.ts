@@ -14,7 +14,6 @@ interface BrandsStore {
   loaded: boolean;
   loading: boolean;
   fetchBrands: (force?: boolean) => Promise<void>;
-  addBrand: (name: string) => Promise<void>;
   removeBrand: (id: string) => Promise<void>;
   updateBrand: (id: string, data: Partial<BrandItem>) => void;
 }
@@ -36,20 +35,6 @@ export const useBrandsStore = create<BrandsStore>()((set, get) => ({
     } catch {
       set({ loading: false });
     }
-  },
-
-  addBrand: async (name) => {
-    const slug = name.toLowerCase().replace(/\s+/g, "-");
-    const temp: BrandItem = { id: String(Date.now()), name, slug, image: "" };
-    set({ brands: [...get().brands, temp] });
-
-    const res = await fetch("/api/brands", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    const brands = await res.json();
-    set({ brands });
   },
 
   removeBrand: async (id) => {

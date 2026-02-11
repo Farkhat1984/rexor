@@ -121,6 +121,9 @@ function initSchema(db: Database.Database) {
 
   // Migration: add userId column to orders
   try { db.exec(`ALTER TABLE orders ADD COLUMN userId TEXT NOT NULL DEFAULT ''`); } catch {}
+
+  // Migration: unique index on brand name for auto-sync from products
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_name ON brands(name)`); } catch {}
 }
 
 // --- Product serialization ---

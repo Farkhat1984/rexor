@@ -180,6 +180,17 @@ export function GET(req: NextRequest) {
   return NextResponse.json({ products, total, filterOptions, stats }, { headers: CACHE_SHORT });
 }
 
+export async function DELETE() {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  const db = getDb();
+  const count = (db.prepare("SELECT COUNT(*) as c FROM products").get() as { c: number }).c;
+  db.prepare("DELETE FROM products").run();
+
+  return NextResponse.json({ ok: true, deleted: count });
+}
+
 export async function POST(req: NextRequest) {
   const denied = await requireAdmin();
   if (denied) return denied;
@@ -221,6 +232,18 @@ export async function POST(req: NextRequest) {
   });
 
   insertMany(items.map(serializeProduct));
+
+  // Auto-sync brands: create new brands from imported products
+  const brandNames = [...new Set(items.map((p: Record<string, unknown>) => String(p.brand || "").trim()).filter(Boolean))];
+  if (brandNames.length > 0) {
+    const insertBrand = db.prepare(
+      "INSERT OR IGNORE INTO brands (id, name, slug, image) VALUES (?, ?, ?, '')"
+    );
+    for (const name of brandNames) {
+      const slug = name.toLowerCase().replace(/\s+/g, "-");
+      insertBrand.run(slug + "-" + Date.now(), name, slug);
+    }
+  }
 
   return NextResponse.json({ ok: true, count: items.length });
 }
