@@ -15,8 +15,9 @@ export default function AdminBannersPage() {
   useEffect(() => { fetchBanners(); }, [fetchBanners]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [newLink, setNewLink] = useState("/catalog");
-  const [page, setPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(PER_PAGE);
   const [localLinks, setLocalLinks] = useState<Record<string, string>>({});
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   function handleLinkChange(id: string, value: string) {
     setLocalLinks((prev) => ({ ...prev, [id]: value }));
@@ -30,8 +31,19 @@ export default function AdminBannersPage() {
     return localLinks[banner.id] !== undefined ? localLinks[banner.id] : banner.link;
   }
 
-  const totalPages = Math.ceil(banners.length / PER_PAGE);
-  const paginated = banners.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const visible = banners.slice(0, visibleCount);
+  const hasMore = visibleCount < banners.length;
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting && hasMore) setVisibleCount((c) => c + PER_PAGE); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore]);
 
   async function handleAddImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -96,7 +108,7 @@ export default function AdminBannersPage() {
 
       {/* Banner list */}
       <div className="space-y-3">
-        {paginated.map((banner) => (
+        {visible.map((banner) => (
           <div
             key={banner.id}
             className="bg-brand-50 border border-brand-100 p-3"
@@ -150,41 +162,7 @@ export default function AdminBannersPage() {
         ))}
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1 py-5">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
-          >
-            &lsaquo;
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((pg) => pg === 1 || pg === totalPages || Math.abs(pg - page) <= 2)
-            .map((pg, idx, arr) => (
-              <span key={pg} className="contents">
-                {idx > 0 && arr[idx - 1] !== pg - 1 && (
-                  <span className="text-brand-300 text-xs px-1">&hellip;</span>
-                )}
-                <button
-                  onClick={() => setPage(pg)}
-                  className={`w-8 h-8 flex items-center justify-center text-xs border ${
-                    pg === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white"
-                  }`}
-                >
-                  {pg}
-                </button>
-              </span>
-            ))}
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
-          >
-            &rsaquo;
-          </button>
-        </div>
-      )}
+      {hasMore && <div ref={sentinelRef} className="py-5" />}
 
       {banners.length === 0 && (
         <p className="text-center text-sm text-brand-400 py-8">

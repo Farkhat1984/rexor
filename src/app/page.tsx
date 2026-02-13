@@ -19,6 +19,7 @@ export default function HomePage() {
   const [hasProducts, setHasProducts] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const brandsScrollRef = useRef<HTMLDivElement>(null);
   const [activeDot, setActiveDot] = useState(0);
 
   useEffect(() => {
@@ -67,6 +68,52 @@ export default function HomePage() {
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Auto-scroll banners every 5 seconds
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || banners.length <= 1) return;
+    let paused = false;
+    let resumeTimer: ReturnType<typeof setTimeout>;
+    const interval = setInterval(() => {
+      if (paused) return;
+      const idx = Math.round(el.scrollLeft / el.clientWidth);
+      const next = idx >= banners.length - 1 ? 0 : idx + 1;
+      el.scrollTo({ left: next * el.clientWidth, behavior: "smooth" });
+    }, 5000);
+    const onTouch = () => {
+      paused = true;
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => { paused = false; }, 5000);
+    };
+    el.addEventListener("touchstart", onTouch, { passive: true });
+    return () => { clearInterval(interval); clearTimeout(resumeTimer); el.removeEventListener("touchstart", onTouch); };
+  }, [banners.length]);
+
+  // Auto-scroll brands row every 5 seconds
+  useEffect(() => {
+    const el = brandsScrollRef.current;
+    if (!el || storeBrands.length <= 3) return;
+    let paused = false;
+    let resumeTimer: ReturnType<typeof setTimeout>;
+    const brandWidth = 124; // 112px + 12px gap
+    const interval = setInterval(() => {
+      if (paused) return;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (el.scrollLeft >= maxScroll - 10) {
+        el.scrollTo({ left: 0, behavior: "smooth" });
+      } else {
+        el.scrollBy({ left: brandWidth, behavior: "smooth" });
+      }
+    }, 5000);
+    const onTouch = () => {
+      paused = true;
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => { paused = false; }, 5000);
+    };
+    el.addEventListener("touchstart", onTouch, { passive: true });
+    return () => { clearInterval(interval); clearTimeout(resumeTimer); el.removeEventListener("touchstart", onTouch); };
+  }, [storeBrands.length]);
 
   return (
     <div className="max-w-lg mx-auto">
@@ -132,7 +179,7 @@ export default function HomePage() {
             Все
           </Link>
         </div>
-        <div className="flex gap-3 overflow-x-auto snap-x scrollbar-hide pb-2 px-4">
+        <div ref={brandsScrollRef} className="flex gap-3 overflow-x-auto snap-x scrollbar-hide pb-2 px-4">
           {storeBrands.map((brand) => (
             <div
               key={brand.id}

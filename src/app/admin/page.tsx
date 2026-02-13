@@ -22,6 +22,7 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterGender, setFilterGender] = useState("");
@@ -43,6 +44,8 @@ export default function AdminProductsPage() {
     brand: string;
     stock: number;
   } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Debounce search
   useEffect(() => {
@@ -52,6 +55,10 @@ export default function AdminProductsPage() {
 
   // Fetch products from API
   const fetchPage = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("limit", String(PER_PAGE));
@@ -59,23 +66,41 @@ export default function AdminProductsPage() {
     if (filterBrand) params.set("brand", filterBrand);
     if (filterGender) params.set("gender", filterGender);
 
-    setLoading(true);
-    fetch(`/api/products?${params}`)
+    if (page === 1) setLoading(true); else setLoadingMore(true);
+    fetch(`/api/products?${params}`, { signal: controller.signal, cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
-        setProducts(data.products || []);
-        setTotal(data.total || 0);
-        setTotalAll(data.stats?.totalAll || 0);
-        setTotalStock(data.stats?.totalStock || 0);
-        setTotalRetail(data.stats?.totalRetail || 0);
-        setBrandOptions(data.filterOptions?.brands || []);
+        if (!controller.signal.aborted) {
+          setProducts((prev) => page === 1 ? (data.products || []) : [...prev, ...(data.products || [])]);
+          setTotal(data.total || 0);
+          setTotalAll(data.stats?.totalAll || 0);
+          setTotalStock(data.stats?.totalStock || 0);
+          setTotalRetail(data.stats?.totalRetail || 0);
+          setBrandOptions(data.filterOptions?.brands || []);
+        }
       })
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) { setLoading(false); setLoadingMore(false); }
+      });
   }, [page, debouncedSearch, filterBrand, filterGender]);
 
   useEffect(() => { fetchPage(); }, [fetchPage]);
 
-  const totalPages = Math.ceil(total / PER_PAGE);
+  const hasMore = products.length < total;
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) setPage((p) => p + 1); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore]);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -157,6 +182,9 @@ export default function AdminProductsPage() {
   }
 
   async function removeProduct(id: string) {
+    // Cancel any in-flight fetch so it doesn't overwrite the optimistic update
+    if (abortRef.current) abortRef.current.abort();
+
     const removed = products.find((p) => p.id === id);
     setProducts((prev) => prev.filter((p) => p.id !== id));
     if (removed) {
@@ -247,7 +275,7 @@ export default function AdminProductsPage() {
           <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-400" />
           <input
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => { setSearch(e.target.value); setProducts([]); setPage(1); }}
             placeholder="Поиск: артикул, бренд, название..."
             className="w-full h-10 pl-9 pr-4 bg-brand-50 border border-brand-100 text-sm outline-none focus:border-brand-300"
           />
@@ -255,7 +283,7 @@ export default function AdminProductsPage() {
         <div className="flex gap-2 flex-wrap">
           <select
             value={filterBrand}
-            onChange={(e) => { setFilterBrand(e.target.value); setPage(1); }}
+            onChange={(e) => { setFilterBrand(e.target.value); setProducts([]); setPage(1); }}
             className="h-8 px-2 bg-brand-50 border border-brand-100 text-xs outline-none"
           >
             <option value="">Все бренды</option>
@@ -265,7 +293,7 @@ export default function AdminProductsPage() {
           </select>
           <select
             value={filterGender}
-            onChange={(e) => { setFilterGender(e.target.value); setPage(1); }}
+            onChange={(e) => { setFilterGender(e.target.value); setProducts([]); setPage(1); }}
             className="h-8 px-2 bg-brand-50 border border-brand-100 text-xs outline-none"
           >
             <option value="">Все гендеры</option>
@@ -275,7 +303,7 @@ export default function AdminProductsPage() {
           </select>
           {(search || filterBrand || filterGender) && (
             <button
-              onClick={() => { setSearch(""); setFilterBrand(""); setFilterGender(""); setPage(1); }}
+              onClick={() => { setSearch(""); setFilterBrand(""); setFilterGender(""); setProducts([]); setPage(1); }}
               className="text-[10px] text-brand-500 underline"
             >
               Сбросить
@@ -475,39 +503,9 @@ export default function AdminProductsPage() {
         ))}
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1 py-5">
-          <button
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={page === 1}
-            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
-          >
-            &lsaquo;
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((pg) => pg === 1 || pg === totalPages || Math.abs(pg - page) <= 2)
-            .map((pg, idx, arr) => (
-              <span key={pg} className="contents">
-                {idx > 0 && arr[idx - 1] !== pg - 1 && (
-                  <span className="text-brand-300 text-xs px-1">&hellip;</span>
-                )}
-                <button
-                  onClick={() => setPage(pg)}
-                  className={`w-8 h-8 flex items-center justify-center text-xs border ${
-                    pg === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white"
-                  }`}
-                >
-                  {pg}
-                </button>
-              </span>
-            ))}
-          <button
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={page === totalPages}
-            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
-          >
-            &rsaquo;
-          </button>
+      {hasMore && (
+        <div ref={sentinelRef} className="flex items-center justify-center py-5">
+          {loadingMore && <div className="w-6 h-6 border-2 border-brand-200 border-t-brand-900 rounded-full animate-spin" />}
         </div>
       )}
 

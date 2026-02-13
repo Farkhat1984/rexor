@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useOrdersStore } from "@/store/orders";
 import { formatPrice } from "@/lib/data";
 import { OrderStatus } from "@/lib/types";
@@ -26,8 +26,9 @@ export default function AdminOrdersPage() {
 
   const [filterStatus, setFilterStatus] = useState<OrderStatus | "all">("all");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(PER_PAGE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const counts = useMemo(
     () => ({
@@ -64,8 +65,19 @@ export default function AdminOrdersPage() {
     });
   }, [orders, filterStatus, search]);
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting && hasMore) setVisibleCount((c) => c + PER_PAGE); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore]);
 
   function handleConfirm(orderId: string) {
     updateStatus(orderId, "confirmed");
@@ -111,7 +123,7 @@ export default function AdminOrdersPage() {
         ).map(([value, label, count]) => (
           <button
             key={value}
-            onClick={() => { setFilterStatus(value); setPage(1); }}
+            onClick={() => { setFilterStatus(value); setVisibleCount(PER_PAGE); }}
             className={`text-[10px] px-2 py-1 border ${
               filterStatus === value
                 ? "bg-brand-900 text-white border-brand-900"
@@ -128,7 +140,7 @@ export default function AdminOrdersPage() {
         <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-400" />
         <input
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          onChange={(e) => { setSearch(e.target.value); setVisibleCount(PER_PAGE); }}
           placeholder="Поиск: контакт, артикул, бренд..."
           className="w-full h-10 pl-9 pr-4 bg-brand-50 border border-brand-100 text-sm outline-none focus:border-brand-300"
         />
@@ -136,7 +148,7 @@ export default function AdminOrdersPage() {
 
       {/* Orders list */}
       <div className="space-y-2">
-        {paginated.map((order) => (
+        {visible.map((order) => (
           <div key={order.id} className="bg-brand-50 border border-brand-100 p-3">
             {/* Header */}
             <div className="flex items-center justify-between mb-2">
@@ -231,42 +243,7 @@ export default function AdminOrdersPage() {
         ))}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1 py-5">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
-          >
-            &lsaquo;
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((pg) => pg === 1 || pg === totalPages || Math.abs(pg - page) <= 2)
-            .map((pg, idx, arr) => (
-              <span key={pg} className="contents">
-                {idx > 0 && arr[idx - 1] !== pg - 1 && (
-                  <span className="text-brand-300 text-xs px-1">&hellip;</span>
-                )}
-                <button
-                  onClick={() => setPage(pg)}
-                  className={`w-8 h-8 flex items-center justify-center text-xs border ${
-                    pg === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white"
-                  }`}
-                >
-                  {pg}
-                </button>
-              </span>
-            ))}
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="w-8 h-8 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30"
-          >
-            &rsaquo;
-          </button>
-        </div>
-      )}
+      {hasMore && <div ref={sentinelRef} className="py-5" />}
 
       {orders.length === 0 && (
         <div className="text-center py-16 text-brand-400 text-sm">

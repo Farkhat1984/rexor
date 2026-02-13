@@ -36,7 +36,7 @@ interface FilterOptions {
   priceRange: { min: number; max: number };
 }
 
-const PER_PAGE = 10;
+const PER_PAGE = 20;
 
 const defaultFilters: Filters = {
   brand: [],
@@ -62,6 +62,8 @@ function CatalogContent() {
     brands: [], genders: [], mechanisms: [], caseShapes: [], priceRange: { min: 0, max: 999999 },
   });
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const [filters, setFilters] = useState<Filters>({ ...defaultFilters });
   const [sort, setSort] = useState<SortOption | "">(initialSort);
@@ -111,18 +113,31 @@ function CatalogContent() {
     if (filters.priceMax > 0) params.set("priceMax", String(filters.priceMax));
     if (sort) params.set("sort", sort);
 
-    setLoading(true);
+    if (page === 1) setLoading(true); else setLoadingMore(true);
     fetch(`/api/products?${params}`)
       .then((r) => r.json())
       .then((data) => {
-        setProducts(data.products);
+        setProducts((prev) => page === 1 ? data.products : [...prev, ...data.products]);
         setTotal(data.total);
         setFilterOptions(data.filterOptions);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setLoadingMore(false); });
   }, [page, filters, sort, debouncedSearch, ready]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  // IntersectionObserver for infinite scroll
+  const hasMore = products.length < total;
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) setPage((p) => p + 1); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore]);
 
   // Draft count for filter preview
   useEffect(() => {
@@ -150,8 +165,6 @@ function CatalogContent() {
     return () => clearTimeout(timer);
   }, [showFilters, draftFilters, debouncedSearch]);
 
-  const totalPages = Math.ceil(total / PER_PAGE);
-
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (filters.brand.length) count += filters.brand.length;
@@ -173,7 +186,7 @@ function CatalogContent() {
   function applyFilters() {
     setFilters({ ...draftFilters });
     setShowFilters(false);
-    setPage(1);
+    setProducts([]); setPage(1);
   }
   function resetDraftFilters() {
     setDraftFilters({ ...defaultFilters });
@@ -212,12 +225,12 @@ function CatalogContent() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearchQuery(e.target.value); setProducts([]); setPage(1); }}
               placeholder="Артикул, бренд или название..."
               className="w-full h-10 pl-9 pr-9 bg-brand-50 border border-brand-100 text-sm text-brand-900 placeholder:text-brand-400 outline-none focus:border-brand-300 transition-colors"
             />
             {searchQuery && (
-              <button onClick={() => { setSearchQuery(""); setPage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-brand-400">
+              <button onClick={() => { setSearchQuery(""); setProducts([]); setPage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-brand-400">
                 <IconX className="w-4 h-4" />
               </button>
             )}
@@ -244,36 +257,16 @@ function CatalogContent() {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1 py-5 px-4 overflow-x-auto scrollbar-hide">
-          <button
-            onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            disabled={page === 1}
-            className="w-9 h-9 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30 disabled:pointer-events-none active:bg-brand-50 shrink-0"
-          >&lsaquo;</button>
-          {getPageNumbers(page, totalPages).map((p, i) =>
-            p === "..." ? (
-              <span key={`dots-${i}`} className="w-9 h-9 flex items-center justify-center text-sm text-brand-400 shrink-0">&hellip;</span>
-            ) : (
-              <button
-                key={p}
-                onClick={() => { setPage(p as number); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                className={`w-9 h-9 flex items-center justify-center text-sm border transition-colors shrink-0 ${p === page ? "bg-brand-900 text-white border-brand-900" : "text-brand-700 border-brand-200 bg-white active:bg-brand-50"}`}
-              >{p}</button>
-            )
-          )}
-          <button
-            onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            disabled={page === totalPages}
-            className="w-9 h-9 flex items-center justify-center text-sm text-brand-700 border border-brand-200 bg-white disabled:opacity-30 disabled:pointer-events-none active:bg-brand-50 shrink-0"
-          >&rsaquo;</button>
+      {hasMore && (
+        <div ref={sentinelRef} className="flex items-center justify-center py-6">
+          {loadingMore && <div className="w-6 h-6 border-2 border-brand-200 border-t-brand-900 rounded-full animate-spin" />}
         </div>
       )}
 
       {!loading && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 px-6">
           <p className="text-brand-400 text-sm text-center">Попробуйте изменить фильтры или сбросить их</p>
-          <button onClick={() => { setFilters({ ...defaultFilters }); setSort(""); setSearchQuery(""); setPage(1); }} className="mt-4 text-sm font-medium text-brand-900 underline underline-offset-2">Сбросить все</button>
+          <button onClick={() => { setFilters({ ...defaultFilters }); setSort(""); setSearchQuery(""); setProducts([]); setPage(1); }} className="mt-4 text-sm font-medium text-brand-900 underline underline-offset-2">Сбросить все</button>
         </div>
       )}
 
@@ -340,7 +333,7 @@ function CatalogContent() {
           </div>
           <div className="py-2">
             {(Object.keys(sortLabels) as SortOption[]).map((key) => (
-              <button key={key} onClick={() => { setSort(sort === key ? "" : key); setShowSort(false); setPage(1); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm transition-colors ${sort === key ? "text-brand-900 font-semibold bg-brand-50" : "text-brand-700 active:bg-brand-50"}`}>
+              <button key={key} onClick={() => { setSort(sort === key ? "" : key); setShowSort(false); setProducts([]); setPage(1); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm transition-colors ${sort === key ? "text-brand-900 font-semibold bg-brand-50" : "text-brand-700 active:bg-brand-50"}`}>
                 <span>{sortLabels[key]}</span>
                 {sort === key && <svg className="w-4 h-4 text-brand-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
               </button>
@@ -350,21 +343,6 @@ function CatalogContent() {
       </div>
     </div>
   );
-}
-
-function getPageNumbers(current: number, total: number): (number | "...")[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const pages: (number | "...")[] = [];
-  if (current <= 4) {
-    for (let i = 1; i <= 5; i++) pages.push(i);
-    pages.push("...", total);
-  } else if (current >= total - 3) {
-    pages.push(1, "...");
-    for (let i = total - 4; i <= total; i++) pages.push(i);
-  } else {
-    pages.push(1, "...", current - 1, current, current + 1, "...", total);
-  }
-  return pages;
 }
 
 function FilterChips({ title, items, selected, onToggle }: { title: string; items: string[]; selected: string[]; onToggle: (v: string) => void }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { formatPrice } from "@/lib/data";
 import { Product } from "@/lib/types";
@@ -13,17 +13,27 @@ export default function SearchPage() {
   const brands = useBrandsStore((s) => s.brands);
   useEffect(() => { fetchBrands(); }, [fetchBrands]);
 
+  const PER_PAGE = 20;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 300);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // Reset on query change
+  useEffect(() => {
+    setResults([]);
+    setPage(1);
+  }, [debouncedQuery]);
 
   // Fetch search results from API
   useEffect(() => {
@@ -32,21 +42,34 @@ export default function SearchPage() {
       setTotal(0);
       return;
     }
-    setLoading(true);
+    if (page === 1) setLoading(true); else setLoadingMore(true);
     const params = new URLSearchParams({
-      page: "1",
-      limit: "30",
+      page: String(page),
+      limit: String(PER_PAGE),
       search: debouncedQuery.trim(),
     });
     fetch(`/api/products?${params}`)
       .then((r) => r.json())
       .then((data) => {
-        setResults(data.products || []);
+        setResults((prev) => page === 1 ? (data.products || []) : [...prev, ...(data.products || [])]);
         setTotal(data.total || 0);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [debouncedQuery]);
+      .finally(() => { setLoading(false); setLoadingMore(false); });
+  }, [debouncedQuery, page]);
+
+  const hasMore = results.length < total;
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) setPage((p) => p + 1); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore]);
 
   const quickBrands = brands.slice(0, 4);
 
@@ -125,6 +148,11 @@ export default function SearchPage() {
                 </Link>
               ))}
             </div>
+            {hasMore && (
+              <div ref={sentinelRef} className="flex items-center justify-center py-6">
+                {loadingMore && <div className="w-6 h-6 border-2 border-brand-200 border-t-brand-900 rounded-full animate-spin" />}
+              </div>
+            )}
           </>
         )}
       </div>
