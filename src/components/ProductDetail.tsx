@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const ARTryOn = dynamic(() => import("@/components/ARTryOn"), { ssr: false });
 import { formatPrice, getDiscountedPrice } from "@/lib/data";
 import { Product } from "@/lib/types";
 import { useCartStore } from "@/store/cart";
@@ -14,6 +17,7 @@ import {
   IconTelegram,
   IconWhatsApp,
   IconCart,
+  IconCamera,
 } from "@/components/Icons";
 import { WatchImage } from "@/components/WatchImage";
 import { useSettingsStore } from "@/store/settings";
@@ -44,6 +48,7 @@ export function ProductDetail() {
   const whatsappPhone = useSettingsStore((s) => s.whatsappPhone);
   const [selectedImage, setSelectedImage] = useState(0);
   const [shared, setShared] = useState(false);
+  const [showAR, setShowAR] = useState(false);
 
   if (loading) {
     return (
@@ -176,6 +181,15 @@ export function ProductDetail() {
             <IconCart className="w-5 h-5" />
             {outOfStock ? "Нет в наличии" : cartFull ? `Макс. кол-во (${product.stock})` : "В корзину"}
           </button>
+          {product.images.length > 0 && (
+            <button
+              onClick={() => setShowAR(true)}
+              className="w-full flex items-center justify-center gap-2.5 h-12 border border-brand-900 text-brand-900 text-sm font-medium tracking-wide uppercase transition-colors active:bg-brand-50"
+            >
+              <IconCamera className="w-5 h-5" />
+              Примерить на руке
+            </button>
+          )}
           <a href={telegramLink} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center gap-2.5 h-12 bg-[#2AABEE] text-white text-sm font-medium tracking-wide transition-colors active:bg-[#229ED9]">
             <IconTelegram className="w-5 h-5" />
             Написать в Telegram
@@ -190,6 +204,13 @@ export function ProductDetail() {
           </button>
         </div>
       </div>
+
+      {showAR && product.images.length > 0 && (
+        <ARTryOn
+          imageUrl={product.images[selectedImage]}
+          onClose={() => setShowAR(false)}
+        />
+      )}
     </div>
   );
 }
