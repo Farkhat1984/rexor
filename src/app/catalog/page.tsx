@@ -271,7 +271,7 @@ function CatalogContent() {
       )}
 
       {/* Filter bottom sheet */}
-      <div className={`fixed inset-0 z-50 transition-opacity duration-300 ${showFilters ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+      <div className={`fixed inset-0 z-[60] transition-opacity duration-300 ${showFilters ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
         <div className="absolute inset-0 bg-black/40" onClick={() => setShowFilters(false)} />
         <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[85vh] flex flex-col transition-transform duration-300 ${showFilters ? "translate-y-0" : "translate-y-full"}`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-brand-100">
@@ -314,17 +314,17 @@ function CatalogContent() {
               <p className="text-[11px] text-brand-400 mt-1.5">{formatPrice(filterOptions.priceRange.min)} &mdash; {formatPrice(filterOptions.priceRange.max)}</p>
             </section>
           </div>
-          <div className="flex items-center gap-3 px-4 py-4 border-t border-brand-100 bg-white">
+          <div className="flex items-center gap-3 px-4 py-4 pb-6 border-t border-brand-100 bg-white rounded-b-none">
             <button onClick={resetDraftFilters} className="flex-1 h-11 text-sm font-medium text-brand-700 border border-brand-200 rounded-lg active:bg-brand-50">Сбросить</button>
             <button onClick={applyFilters} className="flex-[2] h-11 text-sm font-medium text-white bg-brand-900 rounded-lg active:bg-brand-800">
-              Показать{draftCount !== null ? ` (${draftCount})` : ""}
+              Применить{draftCount !== null ? ` (${draftCount})` : ""}
             </button>
           </div>
         </div>
       </div>
 
       {/* Sort bottom sheet */}
-      <div className={`fixed inset-0 z-50 transition-opacity duration-300 ${showSort ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+      <div className={`fixed inset-0 z-[60] transition-opacity duration-300 ${showSort ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
         <div className="absolute inset-0 bg-black/40" onClick={() => setShowSort(false)} />
         <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl transition-transform duration-300 ${showSort ? "translate-y-0" : "translate-y-full"}`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-brand-100">
