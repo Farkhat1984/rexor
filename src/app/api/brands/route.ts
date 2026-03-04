@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export function GET() {
   const db = getDb();
@@ -7,4 +8,19 @@ export function GET() {
   return NextResponse.json(brands, {
     headers: { "Cache-Control": "no-cache" },
   });
+}
+
+export async function POST(req: NextRequest) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const data = await req.json();
+  const { id, name, slug, image } = data;
+  if (!name || !slug) {
+    return NextResponse.json({ error: "name and slug are required" }, { status: 400 });
+  }
+  const db = getDb();
+  db.prepare("INSERT INTO brands (id, name, slug, image) VALUES (?, ?, ?, ?)").run(
+    id, name, slug, image || ""
+  );
+  return NextResponse.json({ ok: true });
 }

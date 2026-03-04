@@ -18,7 +18,7 @@ export function GET(req: NextRequest) {
 
   // Legacy mode: return all products (no images for list)
   if (!pageParam) {
-    const rows = db.prepare(`SELECT ${PRODUCT_COLUMNS_NO_IMAGES} FROM products ORDER BY rowid DESC`).all();
+    const rows = db.prepare(`SELECT ${PRODUCT_COLUMNS_NO_IMAGES} FROM products ORDER BY (CASE WHEN images != '[]' AND images != '' THEN 0 ELSE 1 END), rowid DESC`).all();
     const products = rows.map((r) => {
       const p = deserializeProduct({ ...(r as Record<string, unknown>), images: "[]" });
       return p;
@@ -111,16 +111,17 @@ export function GET(req: NextRequest) {
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  // Sort
-  let orderBy = "ORDER BY rowid DESC";
+  // Sort — by default show products with images first
+  const imgFirst = "(CASE WHEN images != '[]' AND images != '' THEN 0 ELSE 1 END)";
+  let orderBy = `ORDER BY ${imgFirst}, rowid DESC`;
   switch (sort) {
-    case "popular": orderBy = "ORDER BY isHit DESC, rowid DESC"; break;
-    case "price_asc": orderBy = "ORDER BY retailPrice ASC"; break;
-    case "price_desc": orderBy = "ORDER BY retailPrice DESC"; break;
-    case "new": orderBy = "ORDER BY isNew DESC, rowid DESC"; break;
-    case "discount": orderBy = "ORDER BY discount DESC, rowid DESC"; break;
-    case "name_asc": orderBy = "ORDER BY name COLLATE NOCASE ASC"; break;
-    case "name_desc": orderBy = "ORDER BY name COLLATE NOCASE DESC"; break;
+    case "popular": orderBy = `ORDER BY ${imgFirst}, isHit DESC, rowid DESC`; break;
+    case "price_asc": orderBy = `ORDER BY ${imgFirst}, retailPrice ASC`; break;
+    case "price_desc": orderBy = `ORDER BY ${imgFirst}, retailPrice DESC`; break;
+    case "new": orderBy = `ORDER BY ${imgFirst}, isNew DESC, rowid DESC`; break;
+    case "discount": orderBy = `ORDER BY ${imgFirst}, discount DESC, rowid DESC`; break;
+    case "name_asc": orderBy = `ORDER BY ${imgFirst}, name COLLATE NOCASE ASC`; break;
+    case "name_desc": orderBy = `ORDER BY ${imgFirst}, name COLLATE NOCASE DESC`; break;
   }
 
   // Count total (filtered)

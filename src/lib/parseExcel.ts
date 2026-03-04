@@ -42,6 +42,22 @@ function num(val: unknown): number {
   return isNaN(n) ? 0 : Math.round(n);
 }
 
+const MECHANISM_NORM: Record<string, string> = {
+  "ква": "кварц",
+  "механический": "механика",
+};
+
+const CASE_SHAPE_NORM: Record<string, string> = {
+  "кру": "круг",
+  "бочкобразный": "бочкообразный",
+  "прямоугольный": "прямоугольник",
+};
+
+function normalize(val: string, map: Record<string, string>): string {
+  const lower = val.toLowerCase();
+  return map[lower] || val;
+}
+
 export function parseExcelFile(buffer: ArrayBuffer): Product[] {
   const wb = XLSX.read(buffer, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -64,11 +80,11 @@ export function parseExcelFile(buffer: ArrayBuffer): Product[] {
         caseSize: str(row["Размер корпуса"]),
         waterResistance: str(row["Водонепроницаемость"]),
         glass: str(row["Стекло"]),
-        caseShape: str(row["Форма корпуса"]),
+        caseShape: normalize(str(row["Форма корпуса"]), CASE_SHAPE_NORM),
         indicators: str(row["Индикаторы"]),
         timeDisplay: str(row["Способ отображения времени"]),
         features: str(row["Дополнительные функции"]),
-        mechanism: str(row["Механизм"]),
+        mechanism: normalize(str(row["Механизм"]), MECHANISM_NORM),
         strapMaterial: str(row["Характеристики браслета"]),
         caseMaterial: str(row["Характеристики корпуса"]),
         weight: str(row["Вес"]),

@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, serializeProduct } from "@/lib/db";
 
+export function GET() {
+  const db = getDb();
+  const normalize = db.transaction(() => {
+    // Normalize mechanism values
+    db.prepare(`UPDATE products SET mechanism = 'кварц' WHERE mechanism = 'ква'`).run();
+    db.prepare(`UPDATE products SET mechanism = 'механика' WHERE mechanism = 'механический'`).run();
+    // Normalize caseShape values
+    db.prepare(`UPDATE products SET caseShape = 'круг' WHERE caseShape = 'кру'`).run();
+    db.prepare(`UPDATE products SET caseShape = 'бочкообразный' WHERE caseShape = 'бочкобразный'`).run();
+    db.prepare(`UPDATE products SET caseShape = 'прямоугольник' WHERE caseShape = 'прямоугольный'`).run();
+  });
+  normalize();
+  return NextResponse.json({ ok: true, message: "Filter values normalized" });
+}
+
 export async function POST(req: NextRequest) {
   const data = await req.json();
   const db = getDb();

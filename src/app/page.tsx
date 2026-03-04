@@ -181,8 +181,9 @@ export default function HomePage() {
         </div>
         <div ref={brandsScrollRef} className="flex gap-3 overflow-x-auto snap-x scrollbar-hide pb-2 px-4">
           {storeBrands.map((brand) => (
-            <div
+            <Link
               key={brand.id}
+              href={`/catalog?brand=${brand.slug}`}
               className="snap-start shrink-0 w-28 flex flex-col items-center gap-2"
             >
               <div className="w-28 h-28 bg-brand-50 border border-brand-100 flex items-center justify-center overflow-hidden">
@@ -195,7 +196,7 @@ export default function HomePage() {
                 )}
               </div>
               <span className="text-xs font-medium text-brand-700 text-center leading-tight">{brand.name}</span>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

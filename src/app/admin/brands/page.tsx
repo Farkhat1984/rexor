@@ -7,13 +7,37 @@ import { convertToWebP } from "@/lib/imageUtils";
 
 const PER_PAGE = 20;
 
+function toSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9\s-]/gi, "")
+    .trim()
+    .replace(/[\s]+/g, "-");
+}
+
 export default function AdminBrandsPage() {
-  const { brands, removeBrand, updateBrand, fetchBrands } = useBrandsStore();
+  const { brands, addBrand, removeBrand, updateBrand, fetchBrands } = useBrandsStore();
   useEffect(() => { fetchBrands(true); }, [fetchBrands]);
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(PER_PAGE);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Create brand state
+  const [showCreate, setShowCreate] = useState(false);
+  const [newBrandName, setNewBrandName] = useState("");
+  const [productBrands, setProductBrands] = useState<string[]>([]);
+
+  // Fetch unique brand names from products for dropdown
+  useEffect(() => {
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((products: { brand: string }[]) => {
+        const names = [...new Set(products.map((p) => p.brand).filter(Boolean))].sort();
+        setProductBrands(names);
+      })
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -40,14 +64,75 @@ export default function AdminBrandsPage() {
     updateBrand(brandId, { image: webp });
   }
 
+  // Brand names from products that don't already have a brand entry
+  const existingNames = new Set(brands.map((b) => b.name.toLowerCase()));
+  const availableProductBrands = productBrands.filter((n) => !existingNames.has(n.toLowerCase()));
+
+  function handleCreateBrand() {
+    const name = newBrandName.trim();
+    if (!name) return;
+    if (existingNames.has(name.toLowerCase())) return;
+    const slug = toSlug(name);
+    const id = "brand-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+    addBrand({ id, name, slug, image: "" });
+    setNewBrandName("");
+    setShowCreate(false);
+  }
+
   return (
     <div>
-      <h2 className="font-heading text-lg text-brand-900 mb-1">
-        Бренды ({brands.length})
-      </h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-heading text-lg text-brand-900">
+          Бренды ({brands.length})
+        </h2>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="text-xs bg-brand-900 text-white px-3 py-1.5"
+        >
+          {showCreate ? "Отмена" : "+ Создать"}
+        </button>
+      </div>
       <p className="text-[10px] text-brand-400 mb-4">
-        Бренды создаются автоматически при загрузке товаров из Excel.
+        Бренды создаются автоматически при загрузке товаров из Excel или вручную.
       </p>
+
+      {/* Create brand form */}
+      {showCreate && (
+        <div className="bg-brand-50 border border-brand-200 p-3 mb-4 space-y-2">
+          <p className="text-xs font-medium text-brand-700">Новый бренд</p>
+          {availableProductBrands.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => setNewBrandName(e.target.value)}
+              className="w-full h-9 px-2 bg-white border border-brand-100 text-sm outline-none"
+            >
+              <option value="">Выбрать из товаров...</option>
+              {availableProductBrands.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          )}
+          <input
+            value={newBrandName}
+            onChange={(e) => setNewBrandName(e.target.value)}
+            placeholder="Или введите название..."
+            className="w-full h-9 px-2 bg-white border border-brand-100 text-sm outline-none focus:border-brand-300"
+          />
+          {newBrandName.trim() && (
+            <p className="text-[10px] text-brand-400">Slug: /{toSlug(newBrandName)}</p>
+          )}
+          <button
+            onClick={handleCreateBrand}
+            disabled={!newBrandName.trim() || existingNames.has(newBrandName.trim().toLowerCase())}
+            className="w-full h-9 bg-brand-900 text-white text-xs disabled:opacity-40"
+          >
+            Создать бренд
+          </button>
+          {existingNames.has(newBrandName.trim().toLowerCase()) && newBrandName.trim() && (
+            <p className="text-[10px] text-red-500">Бренд с таким названием уже существует</p>
+          )}
+        </div>
+      )}
 
       {brands.length > 5 && (
         <div className="relative mb-4">
@@ -126,7 +211,7 @@ export default function AdminBrandsPage() {
 
       {brands.length === 0 && (
         <div className="text-center py-16 text-brand-400 text-sm">
-          Брендов пока нет. Загрузите товары из Excel — бренды появятся автоматически.
+          Брендов пока нет. Загрузите товары из Excel или создайте вручную.
         </div>
       )}
     </div>
